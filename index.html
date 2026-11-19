@@ -36,6 +36,7 @@
     -webkit-font-smoothing: antialiased;
   }
   button { font: inherit; color: inherit; cursor: pointer; }
+  [hidden] { display: none !important; }
 
   /* contour lines behind everything */
   .contours {
@@ -44,7 +45,50 @@
   }
   .contours path { fill: none; stroke: rgba(255,255,255,.28); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 
-  .wrap { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 32px 16px 48px; }
+  .wrap { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 32px 16px 48px; }
+
+  /* ---------- buttons & fields ---------- */
+  .btn {
+    min-height: 48px; padding: 0 20px; border-radius: var(--radius); font-weight: 700; font-size: 15px;
+    border: 1.5px solid var(--mint); background: transparent; color: var(--mint);
+  }
+  .btn:hover { background: rgba(95,211,165,.1); }
+  .btn.solid { background: var(--green); border-color: var(--green); color: var(--cream); box-shadow: inset 0 0 0 3px var(--green), inset 0 0 0 4px rgba(246,241,220,.45); }
+  .btn.solid:hover { background: #077a5a; }
+  .btn.cream { background: var(--cream); border-color: var(--cream); color: var(--green); }
+  .btn:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; letter-spacing: .16em; font-weight: 700; color: var(--mint-soft); }
+  .field input {
+    font: inherit; font-size: 18px; padding: 12px 14px; min-height: 50px;
+    border: 1.5px solid rgba(95,211,165,.4); border-radius: var(--radius); background: var(--bg); color: var(--cream);
+  }
+  .field input:focus { outline: none; border-color: var(--mint); }
+  .field input.code { text-transform: uppercase; letter-spacing: .35em; font-weight: 700; text-align: center; font-size: 24px; }
+  .err { color: var(--coral); font-weight: 600; min-height: 1.4em; margin: 0; font-size: 14px; }
+
+  /* ---------- home ---------- */
+  .home { min-height: calc(100vh - 80px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; text-align: center; }
+  .home .eyebrow { font-size: 13px; letter-spacing: .26em; font-weight: 700; color: var(--mint); }
+  .home h1 { margin: 0; font-family: var(--serif); font-weight: 900; font-size: clamp(44px, 9vw, 84px); line-height: 1; color: var(--cream); }
+  .home .lede { margin: 0; color: var(--mint-soft); font-size: 17px; max-width: 520px; }
+  .home-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; width: 100%; max-width: 980px; text-align: left; }
+  .card {
+    background: rgba(15,61,46,.85); border-radius: var(--radius); padding: 22px;
+    box-shadow: inset 0 0 0 1px rgba(95,211,165,.35), 0 14px 30px rgba(0,0,0,.3);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .card.primary { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 6px var(--paper), inset 0 0 0 7px rgba(0,107,78,.5), 0 14px 30px rgba(0,0,0,.35); }
+  .card h2 { margin: 0; font-family: var(--serif); font-size: 26px; color: var(--cream); }
+  .card.primary h2 { color: var(--ink); }
+  .card p { margin: 0; color: var(--mint-soft); font-size: 15px; line-height: 1.45; }
+  .card.primary p { color: #2f5a49; }
+  .card.primary .field label { color: #2f5a49; }
+  .card.primary .field input { background: #fff; color: var(--ink); border-color: #9cc2a8; }
+  .card.primary .field input:focus { border-color: var(--green); }
+  .card.primary .err { color: #b3261e; }
+  .card .grow { flex: 1; }
 
   /* ---------- top bar ---------- */
   .topbar {
@@ -54,17 +98,19 @@
   .brand { display: flex; flex-direction: column; gap: 2px; }
   .brand .eyebrow { font-size: 12px; letter-spacing: .22em; font-weight: 700; color: var(--mint); }
   .brand h1 { margin: 0; font-family: var(--serif); font-weight: 800; font-size: 44px; letter-spacing: .01em; color: var(--cream); line-height: 1.1; }
-  .stats { display: flex; align-items: center; gap: 20px; }
+  .stats { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
   .stat { display: flex; flex-direction: column; align-items: flex-end; }
   .stat .label { font-size: 11px; letter-spacing: .2em; font-weight: 700; color: var(--mint-soft); }
   .stat .money { font-family: var(--serif); font-weight: 900; font-size: 40px; line-height: 1; color: var(--mint); font-variant-numeric: tabular-nums; }
   .stat .count { font-weight: 700; font-size: 22px; color: var(--cream); }
+  .stat .room { font-weight: 800; font-size: 26px; letter-spacing: .18em; color: var(--cream); }
   .divider { width: 1px; height: 44px; background: rgba(255,255,255,.25); }
-  .reset {
-    min-height: 44px; padding: 0 18px; border: 1.5px solid var(--mint); background: transparent;
-    color: var(--mint); border-radius: var(--radius); font-weight: 600; font-size: 14px;
-  }
-  .reset:hover { background: rgba(95,211,165,.1); }
+  .bar-btns { display: flex; gap: 8px; }
+  .bar-btns .btn { min-height: 44px; padding: 0 16px; font-size: 14px; font-weight: 600; }
+
+  /* ---------- layout: board + leaderboard ---------- */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 24px; align-items: start; }
+  .layout.solo { grid-template-columns: minmax(0, 1fr); }
 
   /* ---------- board ---------- */
   .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
@@ -84,24 +130,58 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
     color: var(--green); transition: transform .15s, box-shadow .15s;
   }
-  .tile:hover:not(:disabled) {
+  button.tile:not(.done):hover {
     transform: translateY(-3px);
     box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 6px rgba(0,107,78,.7), 0 2px 0 var(--paper-edge), 0 16px 30px rgba(0,0,0,.4);
   }
   .tile:focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; }
+  .tile.live { box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 7px var(--mint), 0 0 0 3px var(--mint), 0 10px 22px rgba(0,0,0,.3); }
   .tile .amount { font-family: var(--serif); font-weight: 900; font-size: 36px; line-height: 1; white-space: nowrap; }
   .tile .amount small { font-size: .72em; }
   .dots { display: flex; gap: 5px; }
   .dots i { width: 7px; height: 7px; border-radius: 999px; background: #b5d3bf; }
   .dots i.on { background: var(--green); }
-  .tile:disabled {
+  .tile.done {
     background: rgba(255,255,255,.03); box-shadow: none; border: 1.5px dashed rgba(255,255,255,.22);
-    color: var(--done); cursor: not-allowed; gap: 6px;
+    color: var(--done); cursor: default; gap: 6px;
   }
-  .tile:disabled .amount { font-weight: 700; font-size: 28px; text-decoration: line-through; }
+  .tile.done .amount { font-weight: 700; font-size: 28px; text-decoration: line-through; }
   .tile .mark { font-size: 10px; letter-spacing: .2em; font-weight: 800; white-space: nowrap; }
   .tile .mark.ok { color: var(--mint); }
   .tile .mark.bad { color: var(--coral); }
+  .tile .mark.neutral { color: var(--mint-soft); }
+
+  /* ---------- side panel ---------- */
+  .aside { display: flex; flex-direction: column; gap: 16px; }
+  .panel {
+    background: rgba(15,61,46,.88); border-radius: var(--radius); padding: 18px;
+    box-shadow: inset 0 0 0 1px rgba(95,211,165,.35), 0 14px 30px rgba(0,0,0,.3);
+  }
+  .panel h3 { margin: 0 0 12px; font-size: 12px; letter-spacing: .2em; font-weight: 800; color: var(--mint); }
+  .conn { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--mint-soft); }
+  .conn i { width: 9px; height: 9px; border-radius: 999px; background: #e0b84a; flex: none; }
+  .conn.ok i { background: var(--mint); }
+  .conn.bad i { background: var(--coral); }
+  .status-text { margin: 10px 0 0; font-size: 15px; line-height: 1.45; color: var(--text); }
+  .lb { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .lb li {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: var(--radius); background: rgba(255,255,255,.04); font-size: 15px;
+  }
+  .lb li.me { background: rgba(95,211,165,.14); box-shadow: inset 0 0 0 1px rgba(95,211,165,.5); }
+  .lb .pos { font-family: var(--serif); font-weight: 800; color: var(--mint); text-align: center; }
+  .lb li:nth-child(1) .pos { color: #f2d06b; }
+  .lb .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+  .lb .nm i { width: 7px; height: 7px; border-radius: 999px; background: var(--mint); flex: none; }
+  .lb .nm i.off { background: #4b6a5f; }
+  .lb .sc { font-family: var(--serif); font-weight: 800; color: var(--cream); white-space: nowrap; }
+  .lb-empty { margin: 0; color: var(--mint-soft); font-size: 14px; }
+  .pct { display: flex; flex-direction: column; gap: 8px; }
+  .pct .q { font-size: 13px; color: var(--mint-soft); }
+  .pct .big { font-family: var(--serif); font-weight: 900; font-size: 46px; line-height: 1; color: var(--cream); }
+  .pct .meter { height: 8px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .pct .meter b { display: block; height: 100%; background: var(--mint); border-radius: 999px; }
+  .pct .sub { font-size: 13px; color: var(--mint-soft); }
 
   /* ---------- overlays ---------- */
   .overlay { position: fixed; inset: 0; display: none; overflow-y: auto; z-index: 10; }
@@ -125,20 +205,30 @@
   .q-hint { font-size: 12px; letter-spacing: .2em; font-weight: 800; color: var(--mint-soft); margin: 0 0 12px; }
   .options { display: flex; flex-direction: column; gap: 10px; }
   .opt {
-    display: flex; align-items: center; gap: 14px; min-height: 60px;
+    display: flex; align-items: center; gap: 14px; min-height: 60px; width: 100%;
     background: var(--bg-2); border: none; border-radius: var(--radius);
     box-shadow: inset 0 0 0 1px rgba(95,211,165,.35);
     padding: 10px 14px; text-align: left; font-size: clamp(16px, 2vw, 18px); color: var(--text);
     transition: box-shadow .12s, background .12s;
   }
-  .opt:hover { background: #134a37; box-shadow: inset 0 0 0 1.5px var(--mint); }
+  button.opt:hover:not(:disabled) { background: #134a37; box-shadow: inset 0 0 0 1.5px var(--mint); }
   .opt:focus-visible { outline: 3px solid var(--mint); outline-offset: 2px; }
+  .opt:disabled { cursor: default; opacity: .6; }
+  .opt.picked { opacity: 1; box-shadow: inset 0 0 0 2px var(--mint); }
+  .opt.correct { box-shadow: inset 0 0 0 2px var(--mint); background: rgba(95,211,165,.14); }
+  .opt .tag { margin-left: auto; font-size: 11px; letter-spacing: .14em; font-weight: 800; color: var(--mint); white-space: nowrap; }
   .opt .letter {
     flex: none; width: 40px; height: 40px; display: grid; place-items: center;
     background: var(--green); color: var(--cream); font-family: var(--serif); font-weight: 800; font-size: 18px; border-radius: 3px;
     box-shadow: inset 0 0 0 2px var(--green), inset 0 0 0 3px rgba(246,241,220,.45);
   }
   .q-note { margin-top: 16px; font-size: 13px; color: var(--mint-soft); }
+  .host-box { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .host-live { display: flex; gap: 10px; }
+  .host-live div { flex: 1; padding: 12px; border-radius: var(--radius); background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px rgba(95,211,165,.3); }
+  .host-live b { display: block; font-family: var(--serif); font-size: 30px; color: var(--cream); }
+  .host-live span { font-size: 11px; letter-spacing: .16em; font-weight: 700; color: var(--mint-soft); }
+  .host-box .btn { min-height: 56px; font-size: 17px; }
 
   #zoom { background: rgba(3,16,12,.92); cursor: zoom-out; z-index: 20; }
   #zoom img { display: block; max-width: 95vw; max-height: 92vh; margin: 4vh auto; object-fit: contain; }
@@ -166,6 +256,9 @@
   .r-answer:empty { display: none; }
   .r-explain { margin: 0; font-size: 15px; line-height: 1.5; background: rgba(0,0,0,.16); padding: 14px 18px; border-radius: var(--radius); width: 100%; }
   .r-explain:empty { display: none; }
+  .r-wait { margin: 8px 0 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .r-wait i { width: 10px; height: 10px; border-radius: 999px; background: var(--cream); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
   .r-btn {
     margin-top: 10px; width: 100%; max-width: 420px; min-height: 56px; border: none; border-radius: var(--radius);
     background: var(--cream); font-weight: 700; font-size: 17px; box-shadow: 0 6px 18px rgba(0,0,0,.25);
@@ -197,9 +290,21 @@
   .pw-actions { display: flex; gap: 10px; }
   .pw-actions button { flex: 1; min-height: 50px; border-radius: var(--radius); font-weight: 700; font-size: 16px; }
   .pw-cancel { background: none; border: 1.5px solid rgba(255,255,255,.3); color: var(--text); }
-  .pw-ok { background: var(--red); color: #fff; border: none; }
+  .pw-ok { background: var(--green); color: var(--cream); border: none; }
+  .pw-ok.danger { background: var(--red); color: #fff; }
+
+  /* toast */
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40;
+    background: var(--cream); color: var(--ink); padding: 12px 18px; border-radius: var(--radius);
+    font-weight: 600; font-size: 15px; box-shadow: 0 10px 30px rgba(0,0,0,.4); max-width: calc(100% - 32px);
+  }
 
   /* ---------- tablet ---------- */
+  @media (max-width: 1080px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  }
   @media (max-width: 820px) {
     .brand h1 { font-size: 36px; }
     .stat .money { font-size: 32px; }
@@ -210,11 +315,13 @@
     .q-body { grid-template-columns: 1fr; gap: 18px; }
     .q-card { min-height: 0; }
     .q-img { max-height: 280px; }
+    .home-cards { grid-template-columns: minmax(0, 1fr); max-width: 460px; }
   }
 
   /* ---------- phone: same 5-column board, scaled down ---------- */
   @media (max-width: 560px) {
     .wrap { padding: 18px 10px 32px; }
+    .home { gap: 20px; min-height: 0; padding-top: 8px; }
     .topbar { gap: 12px; padding-bottom: 12px; margin-bottom: 16px; }
     .brand .eyebrow { font-size: 10px; }
     .brand h1 { font-size: 30px; }
@@ -222,8 +329,10 @@
     .stat { align-items: flex-start; }
     .stat .money { font-size: 28px; }
     .stat .count { font-size: 18px; }
+    .stat .room { font-size: 20px; }
     .divider { height: 36px; }
-    .reset { margin-left: auto; padding: 0 14px; font-size: 13px; }
+    .bar-btns { width: 100%; }
+    .bar-btns .btn { flex: 1; }
 
     .board, .col { gap: 6px; }
     .cat {
@@ -239,9 +348,10 @@
     .tile .amount { font-size: 19px; }
     .dots { gap: 3px; }
     .dots i { width: 5px; height: 5px; }
-    .tile:disabled .amount { font-size: 16px; }
+    .tile.done .amount { font-size: 16px; }
     .tile .mark { font-size: 12px; letter-spacing: 0; }
     .tile .mark .word { display: none; }
+    .aside { grid-template-columns: minmax(0, 1fr); }
 
     .q-inner { padding: 18px 14px 28px; }
     .q-head { margin-bottom: 14px; }
@@ -282,26 +392,93 @@
 </svg>
 
 <div class="wrap">
-  <header class="topbar">
-    <div class="brand">
-      <span class="eyebrow">SPĒLES NAUDA · LATVIJA</span>
-      <h1>ĢIS Viktorīna</h1>
-    </div>
-    <div class="stats">
-      <div class="stat">
-        <span class="label">KONTS</span>
-        <span class="money"><span id="score">0</span> €</span>
-      </div>
-      <div class="divider"></div>
-      <div class="stat">
-        <span class="label">ATBILDĒTI</span>
-        <span class="count" id="progress">0 / 25</span>
-      </div>
-      <button class="reset" id="resetBtn" type="button">Sākt no jauna</button>
-    </div>
-  </header>
 
-  <main class="board" id="board" aria-label="Spēles laukums"></main>
+  <!-- ===== home ===== -->
+  <section class="home" id="home" hidden>
+    <span class="eyebrow">SPĒLES NAUDA · LATVIJA</span>
+    <h1>ĢIS Viktorīna</h1>
+    <p class="lede">Zeme, daba, kartes un augstumi. Izvēlies, kā spēlēsi.</p>
+    <div class="home-cards">
+      <form class="card primary" id="joinForm" autocomplete="off">
+        <h2>Pievienoties spēlei</h2>
+        <p>Ievadi savu vārdu un istabas kodu, ko rāda moderators.</p>
+        <div class="field">
+          <label for="joinName">VĀRDS</label>
+          <input id="joinName" maxlength="20" placeholder="Tavs vārds" required>
+        </div>
+        <div class="field">
+          <label for="joinCode">ISTABAS KODS</label>
+          <input id="joinCode" class="code" maxlength="4" placeholder="ABCD" autocapitalize="characters" required>
+        </div>
+        <p class="err" id="joinErr" aria-live="polite"></p>
+        <button class="btn solid" type="submit" id="joinBtn">Pievienoties</button>
+      </form>
+      <div class="card">
+        <h2>Moderators</h2>
+        <p class="grow">Izveido istabu, izvēlies jautājumus un vadi spēli. Spēlētāji redz jautājumu automātiski.</p>
+        <p class="err" id="hostErr" aria-live="polite"></p>
+        <button class="btn" type="button" id="hostBtn">Izveidot istabu</button>
+      </div>
+      <div class="card">
+        <h2>Spēlēt vienam</h2>
+        <p class="grow">Izvēlies jautājumus pats savā tempā. Progress saglabājas arī pēc lapas pārlādes.</p>
+        <button class="btn" type="button" id="soloBtn">Spēlēt vienam</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== game ===== -->
+  <section id="game" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <span class="eyebrow" id="modeLabel">SPĒLES NAUDA · LATVIJA</span>
+        <h1>ĢIS Viktorīna</h1>
+      </div>
+      <div class="stats">
+        <div class="stat" id="statMoney">
+          <span class="label">KONTS</span>
+          <span class="money"><span id="score">0</span> €</span>
+        </div>
+        <div class="stat" id="statRoom">
+          <span class="label">ISTABA</span>
+          <span class="room" id="roomCode">----</span>
+        </div>
+        <div class="divider"></div>
+        <div class="stat" id="statProgress">
+          <span class="label" id="progressLabel">ATBILDĒTI</span>
+          <span class="count" id="progress">0 / 25</span>
+        </div>
+        <div class="bar-btns">
+          <button class="btn" id="resetBtn" type="button">Sākt no jauna</button>
+          <button class="btn" id="leaveBtn" type="button">Iziet</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout" id="layout">
+      <main class="board" id="board" aria-label="Spēles laukums"></main>
+      <aside class="aside" id="aside">
+        <div class="panel">
+          <div class="conn" id="conn"><i></i><span id="connText">Savienojas…</span></div>
+          <p class="status-text" id="statusText"></p>
+        </div>
+        <div class="panel" id="pctPanel" hidden>
+          <h3>PĒDĒJAIS JAUTĀJUMS</h3>
+          <div class="pct">
+            <span class="q" id="pctQ"></span>
+            <span class="big" id="pctBig"></span>
+            <div class="meter"><b id="pctBar"></b></div>
+            <span class="sub" id="pctSub"></span>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>LĪDERU TABULA</h3>
+          <ol class="lb" id="lb"></ol>
+          <p class="lb-empty" id="lbEmpty">Vēl neviens nav pievienojies.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
 </div>
 
 <!-- question -->
@@ -317,9 +494,16 @@
         <img class="q-img" id="qImg" alt="" hidden>
       </div>
       <div>
-        <p class="q-hint">IZVĒLIES VIENU ATBILDI</p>
+        <p class="q-hint" id="qHint">IZVĒLIES VIENU ATBILDI</p>
         <div class="options" id="qOpts"></div>
-        <p class="q-note">Jautājumu nevar aizvērt bez atbildes – arī pārlādējot lapu tas atvērsies atkal.</p>
+        <p class="q-note" id="qNote"></p>
+        <div class="host-box" id="hostBox" hidden>
+          <div class="host-live">
+            <div><b id="liveAnswered">0 / 0</b><span>ATBILDĒJUŠI</span></div>
+            <div><b id="liveCorrect">0</b><span>PAREIZI</span></div>
+          </div>
+          <button class="btn solid" type="button" id="endQBtn">Jautājums pabeigts</button>
+        </div>
       </div>
     </div>
   </div>
@@ -328,16 +512,16 @@
 <!-- image zoom -->
 <div class="overlay" id="zoom"><img id="zoomImg" alt=""></div>
 
-<!-- reset password -->
+<!-- password -->
 <div class="overlay" id="pw" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
   <form class="pw-box" id="pwForm" autocomplete="off">
-    <h2 id="pwTitle">Sākt no jauna</h2>
-    <p>Ievadi paroli, lai dzēstu visu progresu un naudu.</p>
+    <h2 id="pwTitle"></h2>
+    <p id="pwText"></p>
     <input id="pwInput" type="password" inputmode="numeric" placeholder="Parole" aria-label="Parole">
     <p class="pw-err" id="pwErr" aria-live="polite"></p>
     <div class="pw-actions">
       <button type="button" class="pw-cancel" id="pwCancel">Atcelt</button>
-      <button type="submit" class="pw-ok">Dzēst progresu</button>
+      <button type="submit" class="pw-ok" id="pwOk"></button>
     </div>
   </form>
 </div>
@@ -354,11 +538,12 @@
     <p class="r-sub" id="rSub"></p>
     <p class="r-answer" id="rAnswer"></p>
     <p class="r-explain" id="rExplain"></p>
+    <p class="r-wait" id="rWait" hidden><i></i>Gaidi, kamēr moderators pabeigs jautājumu</p>
     <button class="r-btn" id="rClose" type="button">Atpakaļ uz laukumu</button>
   </div>
 </section>
 
-<!-- end -->
+<!-- end (solo) -->
 <section class="overlay" id="end" role="dialog" aria-modal="true" aria-labelledby="eTitle">
   <div class="r-inner">
     <div class="note">
@@ -372,230 +557,10 @@
   </div>
 </section>
 
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="questions.js"></script>
-<script>
-(() => {
-  const STORAGE_KEY = "gis-spele-v" + QUESTIONS_VERSION;
-  const LETTERS = "ABCDEFGH";
-  const $ = (id) => document.getElementById(id);
-
-  // ---- question lookup: id = "category-index" ----
-  const byId = {};
-  CATEGORIES.forEach((cat, c) =>
-    cat.questions.forEach((q, i) => { byId[c + "-" + i] = { ...q, cat: cat.title, level: i }; })
-  );
-  const TOTAL = Object.keys(byId).length;
-  const MAX_POINTS = Object.values(byId).reduce((s, q) => s + q.points, 0);
-
-  // ---- persisted state ----
-  // answered: { id: { choice, correct } }
-  // open:     id of question currently shown (re-opens after reload)
-  // result:   id whose result screen is showing (re-shows after reload)
-  // endSeen:  end screen already dismissed
-  function emptyState() { return { answered: {}, open: null, result: null, endSeen: false }; }
-  function load() {
-    try {
-      const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (s && typeof s === "object" && s.answered) return { ...emptyState(), ...s };
-    } catch (e) {}
-    return emptyState();
-  }
-  let state = load();
-  function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-  }
-
-  function score() {
-    return Object.entries(state.answered)
-      .reduce((s, [id, a]) => s + (a.correct && byId[id] ? byId[id].points : 0), 0);
-  }
-
-  function el(tag, cls, text) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text != null) e.textContent = text;
-    return e;
-  }
-  function amount(points) {
-    const s = el("span", "amount", points + " ");
-    s.appendChild(el("small", null, "€"));
-    return s;
-  }
-
-  // ---- board: one column per category, like the desktop layout ----
-  function renderBoard() {
-    const board = $("board");
-    board.innerHTML = "";
-    CATEGORIES.forEach((cat, c) => {
-      const col = el("section", "col");
-      const h = el("h2", "cat");
-      h.appendChild(el("span", cat.short ? "t-long" : null, cat.title));
-      if (cat.short) h.appendChild(el("span", "t-short", cat.short));
-      col.appendChild(h);
-      cat.questions.forEach((q, row) => {
-        const id = c + "-" + row;
-        const a = state.answered[id];
-        const b = el("button", "tile");
-        b.type = "button";
-        b.appendChild(amount(q.points));
-        if (a) {
-          b.disabled = true;
-          const m = el("span", "mark " + (a.correct ? "ok" : "bad"), a.correct ? "✓" : "✕");
-          m.appendChild(el("span", "word", a.correct ? " IEGŪTS" : " ZAUDĒTS"));
-          b.appendChild(m);
-          b.setAttribute("aria-label", `${cat.title}, ${q.points} € – jau atbildēts ${a.correct ? "pareizi" : "nepareizi"}`);
-        } else {
-          const dots = el("span", "dots");
-          dots.setAttribute("aria-hidden", "true");
-          for (let k = 0; k < 5; k++) dots.appendChild(el("i", k <= row ? "on" : ""));
-          b.appendChild(dots);
-          b.setAttribute("aria-label", `${cat.title}, ${q.points} €, grūtība ${row + 1} no 5`);
-          b.addEventListener("click", () => openQuestion(id));
-        }
-        col.appendChild(b);
-      });
-      board.appendChild(col);
-    });
-    $("score").textContent = score();
-    $("progress").textContent = `${Object.keys(state.answered).length} / ${TOTAL}`;
-  }
-
-  // ---- question ----
-  function openQuestion(id) {
-    if (state.answered[id]) return;
-    state.open = id;
-    save();
-    showQuestion(id);
-  }
-
-  function showQuestion(id) {
-    const q = byId[id];
-    $("qCat").textContent = q.cat;
-    $("qPts").textContent = q.points + " €";
-    $("qText").textContent = q.q;
-    const img = $("qImg");
-    if (q.image) { img.src = q.image; img.alt = "Attēls jautājumam"; img.hidden = false; }
-    else { img.hidden = true; img.removeAttribute("src"); }
-    const opts = $("qOpts");
-    opts.innerHTML = "";
-    q.options.forEach((text, i) => {
-      const b = el("button", "opt");
-      b.type = "button";
-      b.appendChild(el("span", "letter", LETTERS[i]));
-      b.appendChild(el("span", null, text));
-      b.addEventListener("click", () => answer(id, i), { once: true });
-      opts.appendChild(b);
-    });
-    $("question").classList.add("show");
-    document.body.classList.add("q-open");
-    $("question").scrollTop = 0;
-    document.body.style.overflow = "hidden";
-    opts.firstChild && opts.firstChild.focus({ preventScroll: true });
-  }
-
-  function answer(id, choice) {
-    if (state.answered[id]) return;
-    const q = byId[id];
-    state.answered[id] = { choice, correct: choice === q.answer };
-    state.open = null;
-    state.result = id;
-    save(); // saved before anything is shown – a reload cannot undo it
-    $("question").classList.remove("show");
-    document.body.classList.remove("q-open");
-    renderBoard();
-    showResult(id);
-  }
-
-  // ---- result ----
-  function showResult(id) {
-    const q = byId[id];
-    const a = state.answered[id];
-    const box = $("result");
-    box.className = "overlay show " + (a.correct ? "correct" : "wrong");
-    $("rTitle").textContent = a.correct ? "Pareizi!" : "Nepareizi!";
-    $("rPoints").textContent = (a.correct ? "+" : "") + q.points + " €";
-    $("rPoints").classList.toggle("missed", !a.correct);
-    $("rSub").textContent = a.correct
-      ? `Kontā tagad: ${score()} €`
-      : `Šo naudu tu nesaņēmi. Kontā joprojām: ${score()} €`;
-    $("rAnswer").textContent = a.correct ? "" : `Pareizā atbilde: ${LETTERS[q.answer]}. ${q.options[q.answer]}`;
-    $("rExplain").textContent = q.explain || "";
-    box.scrollTop = 0;
-    document.body.style.overflow = "hidden";
-    $("rClose").focus({ preventScroll: true });
-  }
-
-  function closeResult() {
-    state.result = null;
-    save();
-    $("result").className = "overlay";
-    document.body.style.overflow = "";
-    maybeEnd();
-  }
-
-  // ---- end ----
-  function maybeEnd() {
-    if (Object.keys(state.answered).length < TOTAL || state.endSeen) return;
-    const correct = Object.values(state.answered).filter((a) => a.correct).length;
-    $("ePoints").textContent = `${score()} €`;
-    $("eSub").textContent = `Pareizi atbildēti ${correct} no ${TOTAL} jautājumiem. Maksimums: ${MAX_POINTS} €.`;
-    $("end").classList.add("show");
-    document.body.style.overflow = "hidden";
-    $("eClose").focus({ preventScroll: true });
-  }
-  $("eClose").addEventListener("click", () => {
-    state.endSeen = true; save();
-    $("end").classList.remove("show");
-    document.body.style.overflow = "";
-  });
-
-  // ---- misc ----
-  $("rClose").addEventListener("click", closeResult);
-
-  // Reset is protected by a password (only a casual lock – it is visible in the page source).
-  const RESET_PASSWORD = "0102";
-  function closePw() {
-    $("pw").classList.remove("show");
-    document.body.style.overflow = "";
-  }
-  $("resetBtn").addEventListener("click", () => {
-    $("pwInput").value = "";
-    $("pwErr").textContent = "";
-    $("pw").classList.add("show");
-    document.body.style.overflow = "hidden";
-    $("pwInput").focus();
-  });
-  $("pwCancel").addEventListener("click", closePw);
-  $("pwForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    if ($("pwInput").value !== RESET_PASSWORD) {
-      $("pwErr").textContent = "Nepareiza parole.";
-      $("pwInput").value = "";
-      $("pwInput").focus();
-      return;
-    }
-    state = emptyState(); save();
-    closePw();
-    renderBoard();
-  });
-  $("qImg").addEventListener("click", () => {
-    $("zoomImg").src = $("qImg").src;
-    $("zoom").classList.add("show");
-  });
-  $("zoom").addEventListener("click", () => $("zoom").classList.remove("show"));
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && $("zoom").classList.contains("show")) $("zoom").classList.remove("show");
-    if (e.key === "Escape" && $("pw").classList.contains("show")) closePw();
-  });
-
-  // ---- restore after reload ----
-  if (state.open && !byId[state.open]) state.open = null;
-  if (state.result && !(byId[state.result] && state.answered[state.result])) state.result = null;
-  renderBoard();
-  if (state.result) showResult(state.result);
-  else if (state.open && !state.answered[state.open]) showQuestion(state.open);
-  else maybeEnd();
-})();
-</script>
+<script src="app.js"></script>
 </body>
 </html>
