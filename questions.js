@@ -186,7 +186,7 @@ const CATEGORIES = [
     ],
   },
   {
-    title: "hUMORS",
+    title: "HUMORS",
     questions: [
       {
         points: 100,
