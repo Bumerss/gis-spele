@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="lv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GIS spēle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --olive: #57512f;
+    --olive-dark: #433e22;
+    --sage: #e1e5d5;
+    --sage-hover: #d3d9c2;
+    --tile-text: #9a9c90;
+    --bg: #f3f1ea;
+    --paper: #ffffff;
+    --ink: #2f2c1b;
+    --muted: #7a7864;
+    --done: #ecebe6;
+    --done-text: #c4c3bb;
+    --green: #2f9e44;
+    --red: #d63939;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px 16px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .score {
+    display: flex; align-items: baseline; gap: 10px;
+    font-weight: 800; color: var(--olive);
+  }
+  .score .label { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .score .value { font-size: 34px; font-variant-numeric: tabular-nums; }
+  .score .progress { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .reset {
+    background: none; border: 1px solid #cfccbd; color: var(--muted);
+    padding: 8px 14px; border-radius: var(--radius); font-size: 14px;
+  }
+  .reset:hover { border-color: var(--olive); color: var(--olive); }
+
+  /* ---------- board ---------- */
+  .board-wrap { max-width: 1000px; margin: 16px auto 40px; padding: 0 16px; }
+  .board {
+    background: var(--paper);
+    border: 1px solid #dddbd2;
+    padding: clamp(12px, 4vw, 40px) clamp(8px, 9vw, 108px);
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: clamp(6px, 1.2vw, 12px);
+  }
+  .cat {
+    background: var(--olive);
+    color: #fff;
+    border-radius: var(--radius);
+    min-height: clamp(52px, 8vw, 66px);
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 6px;
+    font-weight: 700;
+    font-size: clamp(9px, 1.6vw, 16px);
+    line-height: 1.2;
+    box-shadow: 0 2px 4px rgba(0,0,0,.15);
+    overflow-wrap: anywhere;
+  }
+  .tile {
+    background: var(--sage);
+    border: none;
+    border-radius: var(--radius);
+    min-height: clamp(44px, 8vw, 64px);
+    font-weight: 700;
+    font-size: clamp(13px, 1.9vw, 18px);
+    color: var(--tile-text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.12);
+    transition: background .15s, transform .15s, color .15s;
+    position: relative;
+  }
+  .tile:hover:not(:disabled) { background: var(--sage-hover); color: var(--olive); transform: translateY(-2px); }
+  .tile:focus-visible { outline: 3px solid var(--olive); outline-offset: 2px; }
+  .tile:disabled {
+    background: var(--done); color: var(--done-text);
+    text-decoration: line-through; box-shadow: none; cursor: not-allowed;
+  }
+  .tile .mark {
+    position: absolute; top: 4px; right: 6px;
+    font-size: 11px; text-decoration: none; font-weight: 800;
+  }
+  .tile .mark.ok { color: var(--green); opacity: .6; }
+  .tile .mark.bad { color: var(--red); opacity: .6; }
+
+  /* ---------- question overlay ---------- */
+  .overlay {
+    position: fixed; inset: 0;
+    display: none;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  .overlay.show { display: block; }
+  #question { background: var(--bg); }
+  .q-inner { max-width: 1000px; margin: 0 auto; padding: 24px 16px 40px; }
+  .q-head {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    border-bottom: 2px solid #d9d6c8; padding-bottom: 12px; margin-bottom: 24px;
+  }
+  .q-cat { font-weight: 800; font-size: clamp(18px, 3vw, 28px); color: var(--olive-dark); text-transform: uppercase; }
+  .q-pts {
+    background: var(--olive); color: #fff; font-weight: 700;
+    padding: 6px 18px; border-radius: 999px; white-space: nowrap; font-size: 15px;
+  }
+  .q-body { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; align-items: start; }
+  .q-card {
+    background: var(--sage); border-radius: 4px;
+    padding: clamp(18px, 3vw, 32px);
+    display: flex; flex-direction: column; gap: 18px; justify-content: center;
+    min-height: 240px;
+  }
+  .q-text {
+    margin: 0; font-weight: 700; color: var(--olive-dark);
+    font-size: clamp(20px, 2.8vw, 30px); line-height: 1.25; text-align: center;
+  }
+  .q-img {
+    width: 100%; max-height: 380px; object-fit: contain;
+    border-radius: 4px; background: #fff; cursor: zoom-in;
+  }
+  .q-hint { font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--olive-dark); margin: 0 0 12px; font-size: 15px; }
+  .options { display: flex; flex-direction: column; gap: 12px; }
+  .opt {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--sage); border: 2px solid transparent; border-radius: 4px;
+    padding: 12px 14px; text-align: left; font-size: clamp(16px, 2vw, 19px);
+    transition: border-color .12s, background .12s;
+  }
+  .opt:hover { border-color: var(--olive); background: #d9dec9; }
+  .opt:focus-visible { outline: 3px solid var(--olive); outline-offset: 2px; }
+  .opt .letter {
+    flex: none; width: 38px; height: 38px; display: grid; place-items: center;
+    background: #f1f2ec; font-weight: 800; color: var(--olive-dark); border-radius: 3px;
+  }
+  .q-note { margin-top: 18px; font-size: 13px; color: var(--muted); }
+
+  /* image zoom */
+  #zoom { background: rgba(20,18,10,.9); cursor: zoom-out; z-index: 20; }
+  #zoom img { display: block; max-width: 95vw; max-height: 92vh; margin: 4vh auto; object-fit: contain; }
+
+  /* ---------- result overlay ---------- */
+  #result { color: #fff; }
+  #result.correct { background: var(--green); }
+  #result.wrong { background: var(--red); }
+  .r-inner {
+    min-height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 32px 16px; gap: 14px;
+  }
+  .r-title { font-size: clamp(40px, 8vw, 84px); font-weight: 800; margin: 0; letter-spacing: -.01em; }
+  .r-points { font-size: clamp(28px, 6vw, 60px); font-weight: 800; margin: 0; font-variant-numeric: tabular-nums; }
+  .r-points.missed { text-decoration: line-through; text-decoration-thickness: 5px; opacity: .9; }
+  .r-sub { font-size: clamp(16px, 2.2vw, 20px); margin: 0; opacity: .95; }
+  .r-answer { font-size: clamp(16px, 2.2vw, 20px); margin: 8px 0 0; max-width: 680px; }
+  .r-explain {
+    max-width: 680px; margin: 4px 0 0; font-size: 16px; line-height: 1.5;
+    background: rgba(0,0,0,.14); padding: 14px 18px; border-radius: var(--radius);
+  }
+  .r-explain:empty { display: none; }
+  .r-btn {
+    margin-top: 18px; background: #fff; border: none; border-radius: var(--radius);
+    padding: 16px 30px; font-weight: 700; font-size: 18px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.2);
+  }
+  #result.correct .r-btn { color: var(--green); }
+  #result.wrong .r-btn { color: var(--red); }
+  .r-btn:hover { transform: translateY(-1px); }
+  .r-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  #result.show .r-inner > * { animation: pop .35s ease-out both; }
+  @keyframes pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+
+  /* ---------- end screen ---------- */
+  #end { background: var(--olive); color: #fff; }
+  #end .r-btn { color: var(--olive); }
+
+  @media (max-width: 720px) {
+    .q-body { grid-template-columns: 1fr; }
+    .q-card { min-height: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="score">
+    <span class="label">Punkti</span>
+    <span class="value" id="score">0</span>
+    <span class="progress" id="progress"></span>
+  </div>
+  <button class="reset" id="resetBtn" type="button">Sākt no jauna</button>
+</header>
+
+<main class="board-wrap">
+  <div class="board" id="board" role="grid" aria-label="Spēles laukums"></div>
+</main>
+
+<!-- question -->
+<section class="overlay" id="question" role="dialog" aria-modal="true" aria-labelledby="qText">
+  <div class="q-inner">
+    <div class="q-head">
+      <div class="q-cat" id="qCat"></div>
+      <div class="q-pts" id="qPts"></div>
+    </div>
+    <div class="q-body">
+      <div class="q-card">
+        <p class="q-text" id="qText"></p>
+        <img class="q-img" id="qImg" alt="" hidden>
+      </div>
+      <div>
+        <p class="q-hint">Izvēlies vienu atbildi!</p>
+        <div class="options" id="qOpts"></div>
+        <p class="q-note">Jautājumu nevar aizvērt bez atbildes – arī pārlādējot lapu tas atvērsies atkal.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- image zoom -->
+<div class="overlay" id="zoom"><img id="zoomImg" alt=""></div>
+
+<!-- result -->
+<section class="overlay" id="result" role="dialog" aria-modal="true" aria-labelledby="rTitle">
+  <div class="r-inner">
+    <h1 class="r-title" id="rTitle"></h1>
+    <p class="r-points" id="rPoints"></p>
+    <p class="r-sub" id="rSub"></p>
+    <p class="r-answer" id="rAnswer"></p>
+    <p class="r-explain" id="rExplain"></p>
+    <button class="r-btn" id="rClose" type="button">Atpakaļ uz spēles laukumu</button>
+  </div>
+</section>
+
+<!-- end -->
+<section class="overlay" id="end" role="dialog" aria-modal="true" aria-labelledby="eTitle">
+  <div class="r-inner">
+    <h1 class="r-title" id="eTitle">Spēle beigusies!</h1>
+    <p class="r-points" id="ePoints"></p>
+    <p class="r-sub" id="eSub"></p>
+    <button class="r-btn" id="eClose" type="button">Apskatīt laukumu</button>
+  </div>
+</section>
+
+<script src="questions.js"></script>
+<script>
+(() => {
+  const STORAGE_KEY = "gis-spele-v" + QUESTIONS_VERSION;
+  const LETTERS = "ABCDEFGH";
+  const $ = (id) => document.getElementById(id);
+
+  // ---- question lookup: id = "category-index" ----
+  const byId = {};
+  CATEGORIES.forEach((cat, c) =>
+    cat.questions.forEach((q, i) => { byId[c + "-" + i] = { ...q, cat: cat.title }; })
+  );
+  const TOTAL = Object.keys(byId).length;
+  const MAX_POINTS = Object.values(byId).reduce((s, q) => s + q.points, 0);
+
+  // ---- persisted state ----
+  // answered: { id: { choice, correct } }
+  // open:     id of question currently shown (re-opens after reload)
+  // result:   id whose result screen is showing (re-shows after reload)
+  // endSeen:  end screen already dismissed
+  function emptyState() { return { answered: {}, open: null, result: null, endSeen: false }; }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (s && typeof s === "object" && s.answered) return { ...emptyState(), ...s };
+    } catch (e) {}
+    return emptyState();
+  }
+  let state = load();
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function score() {
+    return Object.entries(state.answered)
+      .reduce((s, [id, a]) => s + (a.correct && byId[id] ? byId[id].points : 0), 0);
+  }
+
+  // ---- board ----
+  function renderBoard() {
+    const board = $("board");
+    board.innerHTML = "";
+    CATEGORIES.forEach((cat) => {
+      const h = document.createElement("div");
+      h.className = "cat";
+      h.setAttribute("role", "columnheader");
+      h.textContent = cat.title;
+      board.appendChild(h);
+    });
+    for (let row = 0; row < 5; row++) {
+      CATEGORIES.forEach((cat, c) => {
+        const q = cat.questions[row];
+        if (!q) { board.appendChild(document.createElement("div")); return; }
+        const id = c + "-" + row;
+        const a = state.answered[id];
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tile";
+        b.textContent = q.points;
+        if (a) {
+          b.disabled = true;
+          const m = document.createElement("span");
+          m.className = "mark " + (a.correct ? "ok" : "bad");
+          m.textContent = a.correct ? "✓" : "✗";
+          b.appendChild(m);
+          b.setAttribute("aria-label", `${cat.title}, ${q.points} – jau atbildēts ${a.correct ? "pareizi" : "nepareizi"}`);
+        } else {
+          b.setAttribute("aria-label", `${cat.title}, ${q.points} punkti`);
+          b.addEventListener("click", () => openQuestion(id));
+        }
+        board.appendChild(b);
+      });
+    }
+    $("score").textContent = score();
+    $("progress").textContent = `${Object.keys(state.answered).length} / ${TOTAL} jautājumi`;
+  }
+
+  // ---- question ----
+  function openQuestion(id) {
+    if (state.answered[id]) return;
+    state.open = id;
+    save();
+    showQuestion(id);
+  }
+
+  function showQuestion(id) {
+    const q = byId[id];
+    $("qCat").textContent = q.cat;
+    $("qPts").textContent = q.points + " punkti";
+    $("qText").textContent = q.q;
+    const img = $("qImg");
+    if (q.image) { img.src = q.image; img.alt = "Attēls jautājumam"; img.hidden = false; }
+    else { img.hidden = true; img.removeAttribute("src"); }
+    const opts = $("qOpts");
+    opts.innerHTML = "";
+    q.options.forEach((text, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "opt";
+      b.innerHTML = `<span class="letter">${LETTERS[i]}</span><span></span>`;
+      b.lastChild.textContent = text;
+      b.addEventListener("click", () => answer(id, i), { once: true });
+      opts.appendChild(b);
+    });
+    $("question").classList.add("show");
+    $("question").scrollTop = 0;
+    document.body.style.overflow = "hidden";
+    opts.firstChild && opts.firstChild.focus({ preventScroll: true });
+  }
+
+  function answer(id, choice) {
+    if (state.answered[id]) return;
+    const q = byId[id];
+    state.answered[id] = { choice, correct: choice === q.answer };
+    state.open = null;
+    state.result = id;
+    save(); // saved before anything is shown – a reload cannot undo it
+    $("question").classList.remove("show");
+    renderBoard();
+    showResult(id);
+  }
+
+  // ---- result ----
+  function showResult(id) {
+    const q = byId[id];
+    const a = state.answered[id];
+    const el = $("result");
+    el.className = "overlay show " + (a.correct ? "correct" : "wrong");
+    $("rTitle").textContent = a.correct ? "Pareizi!" : "Nepareizi!";
+    $("rPoints").textContent = (a.correct ? "+" : "") + q.points + " punkti";
+    $("rPoints").classList.toggle("missed", !a.correct);
+    $("rSub").textContent = a.correct
+      ? `Tev tagad ir ${score()} punkti.`
+      : `Šos punktus tu nesaņēmi. Tev joprojām ir ${score()} punkti.`;
+    $("rAnswer").textContent = a.correct ? "" : `Pareizā atbilde: ${LETTERS[q.answer]}. ${q.options[q.answer]}`;
+    $("rExplain").textContent = q.explain || "";
+    document.body.style.overflow = "hidden";
+    $("rClose").focus({ preventScroll: true });
+  }
+
+  function closeResult() {
+    state.result = null;
+    save();
+    $("result").className = "overlay";
+    document.body.style.overflow = "";
+    maybeEnd();
+  }
+
+  // ---- end ----
+  function maybeEnd() {
+    if (Object.keys(state.answered).length < TOTAL || state.endSeen) return;
+    const correct = Object.values(state.answered).filter((a) => a.correct).length;
+    $("ePoints").textContent = `${score()} / ${MAX_POINTS} punkti`;
+    $("eSub").textContent = `Pareizi atbildēti ${correct} no ${TOTAL} jautājumiem.`;
+    $("end").classList.add("show");
+    document.body.style.overflow = "hidden";
+    $("eClose").focus({ preventScroll: true });
+  }
+  $("eClose").addEventListener("click", () => {
+    state.endSeen = true; save();
+    $("end").classList.remove("show");
+    document.body.style.overflow = "";
+  });
+
+  // ---- misc ----
+  $("rClose").addEventListener("click", closeResult);
+  $("resetBtn").addEventListener("click", () => {
+    if (!confirm("Vai tiešām sākt no jauna? Viss progress un punkti tiks dzēsti.")) return;
+    state = emptyState(); save();
+    renderBoard();
+  });
+  $("qImg").addEventListener("click", () => {
+    $("zoomImg").src = $("qImg").src;
+    $("zoom").classList.add("show");
+  });
+  $("zoom").addEventListener("click", () => $("zoom").classList.remove("show"));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("zoom").classList.contains("show")) $("zoom").classList.remove("show");
+  });
+
+  // ---- restore after reload ----
+  if (state.open && !byId[state.open]) state.open = null;
+  if (state.result && !(byId[state.result] && state.answered[state.result])) state.result = null;
+  renderBoard();
+  if (state.result) showResult(state.result);
+  else if (state.open && !state.answered[state.open]) showQuestion(state.open);
+  else maybeEnd();
+})();
+</script>
+</body>
+</html>
