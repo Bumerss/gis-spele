@@ -17,7 +17,7 @@
  * SVARĪGI: ja maini jautājumus pēc tam, kad kāds jau spēlējis,
  * palielini QUESTIONS_VERSION, lai notīrītu veco saglabāto progresu.
  */
-const QUESTIONS_VERSION = 5;
+const QUESTIONS_VERSION = 6;
 
 const CATEGORIES = [
   {
@@ -220,14 +220,13 @@ const CATEGORIES = [
         points: 300,
         q: "Kur Jelgavā viena stundiņa visbiežāk pārvēršas par piecām?",
         options: ["Bibliotēkā", "Pilī, meklējot īsto auditoriju", "Tonusā", "Uz konsultāciju pie pasniedzēja"],
-        answer: 1,
+        answer: 2, // Tonusā
       },
       {
         points: 400,
-        q: "Darbs jāiesniedz līdz 23.59. Students to iesniedz nākamajā dienā plkst. 00.01 un saka: “Es kavēju tikai vienu minūti!” Par cik minūtēm viņš patiesībā nokavēja?",
-        options: ["Par vienu", "Par trim", "Par sešdesmit", "Par divām", "Par veselu dienu, jo datums jau cits"],
-        answer: 3,
-        explain: "Divas minūtes: viena līdz pusnaktij, otra pēc tās.",
+        q: "Kāpēc vista pārgāja pāri ceļam?",
+        options: ["Lai nokļūtu otrā pusē", "Bēga no zupas", "Meklēja WiFi", "GPS tā teica"],
+        answer: 0,
       },
       {
         points: 500,
