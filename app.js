@@ -58,6 +58,14 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
   }
+  // growing wait between reconnect attempts: 2 s, 4 s, 8 s … up to 60 s (+ small random jitter)
+  function makeBackoff() {
+    let n = 0;
+    return {
+      next() { const d = Math.min(60000, 2000 * 2 ** n) + Math.random() * 1500; n = Math.min(n + 1, 6); return d; },
+      reset() { n = 0; },
+    };
+  }
   function lockScroll(on) { document.body.style.overflow = on ? "hidden" : ""; }
   function randomId(n) {
     let s = "";
@@ -450,6 +458,7 @@
     peer: null,
     conns: new Map(),  // peerId -> { conn, token }
     retryTimer: null,
+    backoff: makeBackoff(),
     retries: 0,
 
     newState() {
@@ -484,6 +493,7 @@
       host.peer = peer;
       peer.on("open", () => {
         host.retries = 0;
+        host.backoff.reset();
         setConn("ok", "Istaba atvērta");
         host.renderAll();
       });
@@ -493,8 +503,16 @@
         conn.on("error", () => host.drop(conn));
       });
       peer.on("disconnected", () => {
-        setConn("", "Savienojums ar serveri pārtrūka, atjauno…");
-        if (!peer.destroyed) { try { peer.reconnect(); } catch (e) {} }
+        // lost the link to the matchmaking server only – players already connected keep playing.
+        // Reconnect slowly: fast retries get this network blocked by the free server ("429").
+        if (peer.destroyed) return;
+        clearTimeout(host.retryTimer);
+        const wait = host.backoff.next();
+        setConn("", `Savienojums ar serveri pārtrūka. Mēģina vēlreiz pēc ${Math.round(wait / 1000)} s…`);
+        host.retryTimer = setTimeout(() => {
+          if (peer.destroyed || peer.open) return;
+          try { peer.reconnect(); } catch (e) { host.connect(); }
+        }, wait);
       });
       peer.on("error", (err) => {
         if (err.type === "unavailable-id") {
@@ -508,8 +526,11 @@
             setConn("bad", `Istaba ${ROOM_CODE} jau ir atvērta citā ierīcē vai cilnē. Aizver to un pārlādē lapu.`);
           }
         } else if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) {
-          setConn("bad", "Nav savienojuma ar serveri. Mēģina vēlreiz…");
-          host.retryTimer = setTimeout(() => host.connect(), 4000);
+          if (peer.open || peer.disconnected) return; // the "disconnected" handler retries
+          clearTimeout(host.retryTimer);
+          const wait = host.backoff.next();
+          setConn("bad", `Nav savienojuma ar serveri. Mēģina vēlreiz pēc ${Math.round(wait / 1000)} s…`);
+          host.retryTimer = setTimeout(() => host.connect(), wait);
         } else if (err.type === "browser-incompatible") {
           setConn("bad", "Šis pārlūks neatbalsta tiešsaistes spēli.");
         }
@@ -776,7 +797,8 @@
       const peer = new Peer({ debug: 0 });
       player.peer = peer;
       peer.on("open", go);
-      peer.on("disconnected", () => { if (!peer.destroyed) { try { peer.reconnect(); } catch (e) {} } });
+      // a player only needs the matchmaking server to (re)join; an open game link keeps working
+      peer.on("disconnected", () => { if (!peer.destroyed && !(player.conn && player.conn.open)) player.retry(); });
       peer.on("error", (err) => {
         if (err.type === "peer-unavailable") {
           if (!player.joined) player.fail("Istaba vēl nav atvērta. Pagaidi, kamēr moderators to atver, un mēģini vēlreiz.");
@@ -793,8 +815,10 @@
       clearTimeout(player.timer);
       player.attempt++;
       if (!player.joined && player.attempt > 2) { player.fail("Neizdevās pievienoties istabai. Pārbaudi internetu un mēģini vēlreiz."); return; }
-      setConn("bad", "Savienojums pārtrūka. Mēģina vēlreiz…");
-      player.timer = setTimeout(() => player.connect(), Math.min(2000 * player.attempt, 8000));
+      // slow, growing delays – fast retries get the network blocked by the free server ("429")
+      const wait = Math.min(30000, 2000 * 2 ** (player.attempt - 1)) + Math.random() * 1500;
+      setConn("bad", `Savienojums pārtrūka. Mēģina vēlreiz pēc ${Math.round(wait / 1000)} s…`);
+      player.timer = setTimeout(() => player.connect(), wait);
     },
     fail(msg) {
       player.cleanup();
