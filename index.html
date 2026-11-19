@@ -278,6 +278,33 @@
 
   #result.neutral { background: var(--bg-2); }
 
+  /* Latvia map questions */
+  #question.is-map .q-inner { max-width: 1240px; }
+  #question.is-map .q-body { grid-template-columns: minmax(0, .8fr) minmax(0, 1.5fr); }
+  @media (max-width: 820px) { #question.is-map .q-body { grid-template-columns: minmax(0, 1fr); } }
+  .mapbox {
+    width: 100%; border-radius: var(--radius); overflow: hidden; line-height: 0;
+    box-shadow: inset 0 0 0 1px rgba(95,211,165,.35), 0 10px 24px rgba(0,0,0,.3);
+  }
+  .mapbox svg { display: block; width: 100%; height: auto; }
+  .mapbox.tappable svg { cursor: crosshair; touch-action: manipulation; }
+  .lv-sea { fill: #0e3a46; }
+  .lv-nb { fill: #0a2a20; stroke: rgba(255,255,255,.18); stroke-width: 1; }
+  .lv { fill: var(--paper); stroke: var(--green); stroke-width: 2; stroke-linejoin: round; }
+  .lv-dot { stroke: #fff; stroke-width: 2; }
+  .lv-dot.mine { fill: var(--coral); stroke: #3b0d09; stroke-width: 3; }
+  .lv-dot.ok { fill: #1f9d6b; }
+  .lv-dot.bad { fill: #9aa7a1; }
+  .lv-zone { fill: rgba(0,107,78,.22); stroke: var(--green); stroke-width: 2; stroke-dasharray: 6 5; }
+  .lv-target { fill: #f2d06b; stroke: #3d2f00; stroke-width: 2; }
+  .map-confirm { width: 100%; margin-top: 12px; min-height: 56px; font-size: 17px; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 14px; font-weight: 600; text-align: left; }
+  .map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .map-legend i { width: 12px; height: 12px; border-radius: 999px; display: inline-block; border: 2px solid #fff; }
+  .map-legend .k-target { background: #f2d06b; border-color: #3d2f00; border-radius: 2px; transform: rotate(45deg); }
+  .map-legend .k-ok { background: #1f9d6b; }
+  .map-legend .k-bad { background: #9aa7a1; }
+
   /* answer chart */
   .chart { display: flex; flex-direction: column; gap: 10px; width: 100%; text-align: left; }
   .bar-row {
@@ -581,6 +608,7 @@
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="questions.js"></script>
+<script src="latvia-map.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

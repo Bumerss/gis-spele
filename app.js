@@ -187,10 +187,98 @@
       : "istabā nebija neviena spēlētāja";
   }
 
+  // ---- Latvia map (for "put a point on the map" questions) ----
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs) {
+    const e = document.createElementNS(SVG_NS, tag);
+    Object.entries(attrs || {}).forEach(([k, v]) => e.setAttribute(k, v));
+    return e;
+  }
+  function project([lat, lon]) {
+    return [(lon - LV_MAP.lon0) * LV_MAP.cos * LV_MAP.kx, (LV_MAP.lat0 - lat) * LV_MAP.kx];
+  }
+  function unproject(x, y) {
+    return [LV_MAP.lat0 - y / LV_MAP.kx, LV_MAP.lon0 + x / (LV_MAP.cos * LV_MAP.kx)];
+  }
+  function distKm([la1, lo1], [la2, lo2]) {
+    const r = Math.PI / 180, dLa = (la2 - la1) * r, dLo = (lo2 - lo1) * r;
+    const a = Math.sin(dLa / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dLo / 2) ** 2;
+    return 6371 * 2 * Math.asin(Math.sqrt(a));
+  }
+  function makeMapSvg() {
+    const svg = svgEl("svg", { viewBox: `0 0 ${LV_MAP.w} ${LV_MAP.h}`, role: "img", "aria-label": "Latvijas karte" });
+    svg.appendChild(svgEl("rect", { x: 0, y: 0, width: LV_MAP.w, height: LV_MAP.h, class: "lv-sea" }));
+    svg.appendChild(svgEl("path", { d: LV_MAP.neighbors, class: "lv-nb" }));
+    svg.appendChild(svgEl("path", { d: LV_MAP.latvia, class: "lv" }));
+    return svg;
+  }
+  function mapDot(svg, point, cls, r) {
+    const [x, y] = project(point);
+    const c = svgEl("circle", { cx: x.toFixed(1), cy: y.toFixed(1), r: r || 9, class: "lv-dot " + cls });
+    svg.appendChild(c);
+    return c;
+  }
+  function svgPoint(svg, e) {
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return unproject(p.x, p.y).map((v) => Math.round(v * 10000) / 10000);
+  }
+  // map for answering: tap to place a point, then confirm
+  function buildMapInput(box, opts) {
+    const wrap = el("div", "mapbox");
+    const svg = makeMapSvg();
+    wrap.appendChild(svg);
+    box.appendChild(wrap);
+    let point = opts.pickedPoint || null;
+    let marker = null;
+    const draw = () => { if (marker) marker.remove(); marker = point ? mapDot(svg, point, "mine", 11) : null; };
+    draw();
+    if (opts.interactive && !opts.pickedPoint) {
+      wrap.classList.add("tappable");
+      const btn = el("button", "btn solid map-confirm", "Apstiprināt atzīmi");
+      btn.type = "button";
+      btn.disabled = true;
+      svg.addEventListener("click", (e) => { point = svgPoint(svg, e); draw(); btn.disabled = false; });
+      btn.addEventListener("click", () => {
+        if (!point) return;
+        btn.disabled = true;
+        wrap.classList.remove("tappable");
+        svg.style.pointerEvents = "none";
+        opts.onAnswer(point);
+      });
+      box.appendChild(btn);
+    }
+  }
+  // map for the reveal: everyone's points, the target and the "correct" circle
+  function renderMapReveal(box, qid, reveal, myPoint) {
+    const q = byId[qid];
+    const wrap = el("div", "mapbox");
+    const svg = makeMapSvg();
+    const [tx, ty] = project(q.target);
+    svg.appendChild(svgEl("circle", { cx: tx, cy: ty, r: (q.radiusKm / 111.32) * LV_MAP.kx, class: "lv-zone" }));
+    (reveal.points || []).forEach((pt) => mapDot(svg, pt.p, pt.c ? "ok" : "bad", 7));
+    if (myPoint) mapDot(svg, myPoint, "mine", 11);
+    const star = svgEl("path", {
+      class: "lv-target",
+      d: "M0,-16 L4.7,-6.5 L15.2,-4.9 L7.6,2.5 L9.4,12.9 L0,8 L-9.4,12.9 L-7.6,2.5 L-15.2,-4.9 L-4.7,-6.5Z",
+      transform: `translate(${tx.toFixed(1)},${ty.toFixed(1)})`,
+    });
+    svg.appendChild(star);
+    wrap.appendChild(svg);
+    box.appendChild(wrap);
+    const legend = el("div", "map-legend");
+    legend.innerHTML = '<span><i class="k-target"></i></span><span><i class="k-ok"></i>pareizi</span><span><i class="k-bad"></i>garām</span>';
+    legend.firstChild.appendChild(document.createTextNode(q.place));
+    legend.children[1].appendChild(document.createTextNode(` (līdz ${q.radiusKm} km)`));
+    box.appendChild(legend);
+  }
+
   // answer distribution: one row per option, correct option highlighted
   function renderChart(box, qid, reveal, myChoice) {
     const q = byId[qid];
     box.innerHTML = "";
+    if (q.type === "map") { renderMapReveal(box, qid, reveal, Array.isArray(myChoice) ? myChoice : null); return; }
     const max = Math.max(1, ...reveal.counts);
     q.options.forEach((text, i) => {
       const isCorrect = i === q.answer;
@@ -238,8 +326,11 @@
 
     const optsBox = $("qOpts");
     optsBox.innerHTML = "";
-    const answered = opts.picked != null;
-    q.options.forEach((text, i) => {
+    const isMap = q.type === "map";
+    $("question").classList.toggle("is-map", isMap);
+    const answered = opts.picked != null || !!opts.pickedPoint;
+    if (isMap) buildMapInput(optsBox, opts);
+    else q.options.forEach((text, i) => {
       const isBtn = !!opts.interactive;
       const b = el(isBtn ? "button" : "div", "opt");
       if (isBtn) {
@@ -269,7 +360,11 @@
       optsBox.hidden = false;
       chart.hidden = true;
     }
-    $("qHint").textContent = opts.reveal ? "KĀ ATBILDĒJA SPĒLĒTĀJI" : opts.hostView ? "ATBILŽU VARIANTI" : answered ? "TAVA ATBILDE PIEŅEMTA" : "IZVĒLIES VIENU ATBILDI";
+    $("qHint").textContent =
+      opts.reveal ? (isMap ? "KUR SPĒLĒTĀJI IELIKA PUNKTU" : "KĀ ATBILDĒJA SPĒLĒTĀJI") :
+      opts.hostView ? (isMap ? "SPĒLĒTĀJI LIEK PUNKTU KARTĒ" : "ATBILŽU VARIANTI") :
+      answered ? (isMap ? "TAVA ATZĪME PIEŅEMTA" : "TAVA ATBILDE PIEŅEMTA") :
+      isMap ? "PIESKARIES KARTEI, LAI IELIKTU PUNKTU" : "IZVĒLIES VIENU ATBILDI";
     // at the reveal the moderator screen shows the explanation (if the question has one)
     const note = opts.reveal ? (q.explain || "") : (opts.note || "");
     $("qNote").textContent = note;
@@ -282,7 +377,7 @@
     if (!wasOpen) $("question").scrollTop = 0;
     document.body.classList.add("q-open");
     lockScroll(true);
-    if (opts.interactive && !answered && optsBox.firstChild) optsBox.firstChild.focus({ preventScroll: true });
+    if (opts.interactive && !answered && !isMap && optsBox.firstChild) optsBox.firstChild.focus({ preventScroll: true });
   }
   function hideQuestion() {
     shownQKey = null;
@@ -304,7 +399,7 @@
     $("rPoints").textContent = (a && a.correct ? "+" : "") + euro(q.points);
     $("rPoints").classList.toggle("missed", !(a && a.correct));
     $("rSub").textContent = sub;
-    renderChart($("rChart"), id, reveal, a ? a.choice : null);
+    renderChart($("rChart"), id, reveal, a ? (a.point || a.choice) : null);
     $("rExplain").textContent = q.explain || "";
     box.scrollTop = 0;
     lockScroll(true);
@@ -449,11 +544,18 @@
         if (!entry) return;
         const p = hs.players[entry.token];
         const q = byId[d.qid];
-        const choice = Number(d.choice);
         if (!p || !q || hs.phase !== "question" || hs.current !== d.qid) return;
         if (p.answers[d.qid]) { host.sendTo(entry); return; } // one answer only
-        if (!Number.isInteger(choice) || choice < 0 || choice >= q.options.length) return;
-        p.answers[d.qid] = { choice, correct: choice === q.answer };
+        if (q.type === "map") {
+          const pt = Array.isArray(d.point) ? d.point.map(Number) : [];
+          if (pt.length !== 2 || !pt.every(Number.isFinite) || pt[0] < 54 || pt[0] > 59 || pt[1] < 19 || pt[1] > 30) return;
+          const dist = Math.round(distKm(pt, q.target) * 10) / 10;
+          p.answers[d.qid] = { point: pt, dist, correct: dist <= q.radiusKm };
+        } else {
+          const choice = Number(d.choice);
+          if (!Number.isInteger(choice) || choice < 0 || choice >= q.options.length) return;
+          p.answers[d.qid] = { choice, correct: choice === q.answer };
+        }
         host.save();
         if (!host.maybeAutoReveal()) host.broadcast();
       }
@@ -479,7 +581,8 @@
     roundStats() {
       const hs = host.hs;
       const q = byId[hs.current];
-      const counts = q ? q.options.map(() => 0) : [];
+      const counts = q && q.options ? q.options.map(() => 0) : [];
+      const points = [];
       const inRoom = host.onlineTokens();
       let answered = 0, correct = 0;
       Object.entries(hs.players).forEach(([tk, p]) => {
@@ -487,11 +590,12 @@
         if (!a) return;
         answered++;
         inRoom.add(tk);
-        counts[a.choice] = (counts[a.choice] || 0) + 1;
+        if (a.point) points.push({ p: a.point, c: a.correct });
+        else counts[a.choice] = (counts[a.choice] || 0) + 1;
         if (a.correct) correct++;
       });
       const total = inRoom.size;
-      return { qid: hs.current, counts, answered, correct, total, pct: total ? Math.round((correct / total) * 100) : null };
+      return { qid: hs.current, counts, points, answered, correct, total, pct: total ? Math.round((correct / total) * 100) : null };
     },
 
     leaderboard(forToken) {
@@ -506,7 +610,8 @@
       // never send whether the current answer is right before the reveal
       const answers = {};
       Object.entries(p.answers).forEach(([qid, a]) => {
-        answers[qid] = hs.used[qid] ? { choice: a.choice, correct: a.correct } : { choice: a.choice };
+        if (hs.used[qid]) answers[qid] = a;
+        else answers[qid] = a.point ? { point: a.point } : { choice: a.choice };
       });
       return {
         t: "state",
@@ -748,12 +853,13 @@
       if (st.phase === "question" && id) {
         hideResult();
         const a = st.me.answers[id];
-        const k = id + ":" + (a ? a.choice : "-");
+        const k = id + ":" + (a ? (a.point ? a.point.join(",") : a.choice) : "-");
         if (shownQKey !== k) {
           shownQKey = k;
           showQuestion(id, a ? {
             interactive: true,
-            picked: a.choice,
+            picked: a.point ? null : a.choice,
+            pickedPoint: a.point || null,
             note: "Atbilde pieņemta. Rezultāti parādīsies, kad visi būs atbildējuši.",
           } : {
             interactive: true,
@@ -765,7 +871,9 @@
         if (shownQKey) hideQuestion();
         if (shownResult !== id) {
           const a = st.me.answers[id];
-          showResult(id, a && "correct" in a ? a : null, st.reveal, `Kontā tagad: ${euro(st.me.score)}`);
+          const res = a && "correct" in a ? a : null;
+          const dist = res && res.point ? `Tava atzīme: ${String(res.dist).replace(".", ",")} km no mērķa. ` : "";
+          showResult(id, res, st.reveal, `${dist}Kontā tagad: ${euro(st.me.score)}`);
         }
       } else {
         hideQuestion();
@@ -773,16 +881,17 @@
       }
     },
 
-    answer(id, choice) {
+    // value = option index, or [lat, lon] for map questions
+    answer(id, value) {
       if (player.conn && player.conn.open) {
-        player.conn.send({ t: "answer", qid: id, choice });
+        player.conn.send(Array.isArray(value) ? { t: "answer", qid: id, point: value } : { t: "answer", qid: id, choice: value });
         $("qNote").textContent = "Atbilde nosūtīta…";
         $("qNote").hidden = false;
       } else {
+        shownQKey = null; // redraw the question so the player can try again
+        if (player.st) player.apply(player.st);
         $("qNote").textContent = "Nav savienojuma ar istabu. Atbilde netika nosūtīta – mēģini vēlreiz, kad savienojums atjaunosies.";
         $("qNote").hidden = false;
-        shownQKey = null; // next state from the host redraws the options
-        $("qOpts").querySelectorAll("button").forEach((b) => { b.disabled = false; b.classList.remove("picked"); });
       }
     },
 

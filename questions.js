@@ -10,10 +10,14 @@
  *   explain  – (neobligāts) skaidrojums, ko rāda pēc atbildes
  *   draft    – true = melnraksts, nav no oriģinālā PDF (pārbaudi/aizstāj)
  *
+ * Kartes jautājums (spēlētāji pieskaras Latvijas kartei):
+ *   type: "map", place – vietas nosaukums, target – [platums, garums],
+ *   radiusKm – cik km attālumā punkts vēl skaitās pareizs
+ *
  * SVARĪGI: ja maini jautājumus pēc tam, kad kāds jau spēlējis,
  * palielini QUESTIONS_VERSION, lai notīrītu veco saglabāto progresu.
  */
-const QUESTIONS_VERSION = 3;
+const QUESTIONS_VERSION = 4;
 
 const CATEGORIES = [
   {
@@ -29,32 +33,39 @@ const CATEGORIES = [
       },
       {
         points: 200,
-        draft: true,
-        q: "Kura upe tek cauri Kuldīgai un veido platāko ūdenskritumu Eiropā?",
-        options: ["Gauja", "Venta", "Daugava", "Abava"],
-        answer: 1,
-        explain: "Ventas rumba Kuldīgā ir platākais ūdenskritums Eiropā.",
+        type: "map", // spēlētāji pieskaras Latvijas kartei
+        q: "Ieliec punktu Latvijas kartē, kur atrodas apdzīvota vieta Dzērumi!",
+        place: "Dzērumi",
+        target: [56.73, 24.2], // [platums, garums] – Ķekavas pagasts
+        radiusKm: 15, // pareizi, ja punkts ir ne tālāk par šo attālumu
       },
       {
         points: 300,
-        draft: true,
-        q: "Kura ir Latvijas otrā lielākā pilsēta pēc iedzīvotāju skaita?",
-        options: ["Liepāja", "Jelgava", "Daugavpils", "Jūrmala"],
-        answer: 2,
+        q: "Arhīvā atrasti trīs vēsturiski pilsētu nosaukumi — Libau, Mitau un Dunaburg. Kurā rindā mūsdienu pilsētas uzrakstītas pareizajā secībā?",
+        image: "img/vesturiska-karte.png",
+        options: [
+          "Liepāja, Jelgava, Daugavpils",
+          "Lielvārde, Jelgava, Dobele",
+          "Liepāja, Daugavpils, Dagda",
+          "Liepāja, Jēkabpils, Daugavpils", // PDF šis variants atkārtoja A – nomainīts
+          "Limbaži, Madona, Durbe",
+        ],
+        answer: 0,
+        explain: "Libau ir Liepāja, Mitau ir Jelgava, un Dunaburg ir Daugavpils.",
       },
       {
         points: 400,
-        draft: true,
         q: "Kura Latvijas pilsēta atrodas vistālāk uz austrumiem?",
         options: ["Daugavpils", "Rēzekne", "Zilupe", "Ludza"],
         answer: 2,
       },
       {
         points: 500,
-        draft: true,
-        q: "Kura ir Latvijas mazākā pilsēta pēc iedzīvotāju skaita?",
-        options: ["Subate", "Durbe", "Ape", "Pāvilosta"],
-        answer: 1,
+        type: "map",
+        q: "Ieliec punktu Latvijas kartē, kur atrodas apdzīvota vieta Nākotne!",
+        place: "Nākotne",
+        target: [56.6145, 23.5409], // Glūdas pagasts, Jelgavas novads
+        radiusKm: 15,
       },
     ],
   },
@@ -63,41 +74,41 @@ const CATEGORIES = [
     questions: [
       {
         points: 100,
-        draft: true,
-        q: "Kurā kartes pusē parasti atrodas ziemeļi?",
-        options: ["Augšā", "Apakšā", "Pa labi", "Pa kreisi"],
-        answer: 0,
+        q: "Kas atrodas uz austrumiem no skolas? Meklē objektu pie Ozolu ielas.",
+        image: "img/karte-skola.png",
+        options: ["Muzejs", "Bibliotēka", "Parks", "Stacija"],
+        answer: 1,
       },
       {
         points: 200,
-        draft: true,
-        q: "Ko kartē parasti apzīmē zilā krāsa?",
-        options: ["Ceļus", "Ūdens objektus", "Mežus", "Apdzīvotas vietas"],
-        answer: 1,
+        q: "Cik tālu dabā atrodas abi punkti?",
+        image: "img/merogs.png",
+        options: ["40 m", "125 m", "250 m", "400 m", "32 m"],
+        answer: 3,
+        explain: "3,2 cm × 12 500 = 40 000 cm jeb 400 m.",
       },
       {
         points: 300,
-        draft: true,
-        q: "Kartes mērogs ir 1:50 000. Cik metriem dabā atbilst 1 cm kartē?",
-        options: ["50 m", "500 m", "5 km", "50 km"],
-        answer: 1,
-        explain: "1 cm × 50 000 = 50 000 cm = 500 m.",
+        q: "Kur pie atzīmētā punkta nogāze ir stāvāka?",
+        image: "img/nogaze-xy.png",
+        options: ["Pie X", "Pie Y", "Abās vietās vienādi", "Ar šiem datiem to nevar noteikt"],
+        answer: 0, // PDF nav norādīta atbilde – pie X augstumlīknes ir tuvāk viena otrai
+        explain: "Pie X augstumlīknes atrodas tuvāk viena otrai – jo tuvāk līknes, jo stāvāka nogāze.",
       },
       {
         points: 400,
-        draft: true,
-        q: "Ja horizontāles kartē atrodas ļoti tuvu cita citai, kāda ir nogāze?",
-        options: ["Lēzena", "Stāva"],
-        answer: 1,
-        explain: "Jo tuvāk horizontāles, jo straujāk mainās augstums – nogāze ir stāva.",
+        q: "Augstuma starpība ir 5 m, horizontālais attālums ir 100 m. Kāds ir nogāzes slīpums procentos?",
+        options: ["2 %", "10 %", "5 %", "20 %"],
+        answer: 2,
+        explain: "Augstuma starpība 5 m ÷ 100 m × 100 % = 5 %.",
       },
       {
         points: 500,
-        draft: true,
-        q: "Kartē ar mērogu 1:25 000 attālums starp diviem punktiem ir 8 cm. Cik liels tas ir dabā?",
-        options: ["200 m", "800 m", "2 km", "20 km"],
+        q: "Kurš ir īsākais pieejamais maršruts no S līdz F? Plūdu dēļ drīkst izmantot tikai tiltus, kuru klājs ir vismaz 20 m virs jūras līmeņa.",
+        image: "img/marsruti.png",
+        options: ["A maršruts · 800 m", "B maršruts · 1 200 m", "C maršruts · 1 000 m", "C maršruts · 900 m"],
         answer: 2,
-        explain: "8 cm × 25 000 = 200 000 cm = 2 km.",
+        explain: "A ir īsāks, bet tā tilta klājs ir tikai 18 m augstumā. No abiem pieejamajiem maršrutiem C ir par 200 m īsāks nekā B.",
       },
     ],
   },
@@ -191,34 +202,41 @@ const CATEGORIES = [
     questions: [
       {
         points: 100,
-        q: "Kāpēc vista pārgāja pāri ceļam?",
-        options: ["Lai nokļūtu otrā pusē", "Bēga no zupas", "Meklēja WiFi", "GPS tā teica"],
-        answer: 0,
+        q: "Rīgā cilvēks jau trešo reizi apiet vienu kvartālu. Ko viņš dara?",
+        options: ["Meklē pazudušu maku", "Veic kvartāla izpēti", "Meklē bezmaksas stāvvietu", "Vāc soļus"],
+        answer: 2,
       },
       {
         points: 200,
+        q: "Trešdien LBTU bija Meža vakars. Kāpēc ceturtdienas pirmajā lekcijā daļa studentu nav ieradušies?",
+        options: [
+          "Viņi vēl meklē īsto auditoriju Jelgavas pilī.",
+          "Viņi jau no astoņiem sēž bibliotēkā.",
+          "Viņiem trešdiena beidzās tikai ceturtdienas rītā.",
+          "Viņi gaida lekciju turpat, kur vakar bija Meža vakars.",
+        ],
+        answer: 2,
+      },
+      {
+        points: 300,
+        q: "Kur Jelgavā viena stundiņa visbiežāk pārvēršas par piecām?",
+        options: ["Bibliotēkā", "Pilī, meklējot īsto auditoriju", "Tonusā", "Uz konsultāciju pie pasniedzēja"],
+        answer: 1,
+      },
+      {
+        points: 400,
+        q: "Darbs jāiesniedz līdz 23.59. Students to iesniedz nākamajā dienā plkst. 00.01 un saka: “Es kavēju tikai vienu minūti!” Par cik minūtēm viņš patiesībā nokavēja?",
+        options: ["Par vienu", "Par trim", "Par sešdesmit", "Par divām", "Par veselu dienu, jo datums jau cits"],
+        answer: 3,
+        explain: "Divas minūtes: viena līdz pusnaktij, otra pēc tās.",
+      },
+      {
+        points: 500,
+        // PDF 500 punktu slaids ir tukšs – pagaidām atstāts iepriekšējais jautājums
         q: "Kurš dzīvnieks būtu labākais ĢIS speciālists?",
         options: ["Kurmis", "Zelta zivtiņa", "Kaķis", "Pingvīns"],
         answer: 0,
         explain: "Jo kurmis zina visu par pazemes slāņiem.",
-      },
-      {
-        points: 300,
-        q: "Kas ir ātrāks par gaismu?",
-        options: ["Skaņa", "Gepards", "Students, kad pasniedzējs saka “šodien beigsim agrāk”", "Latvijas internets"],
-        answer: 2,
-      },
-      {
-        points: 400,
-        q: "Kur Jelgavā viena stundiņa visbiežāk pārvēršas par piecām?",
-        options: ["Bibliotēkā", "Pilī, meklējot īsto auditoriju", "Tonusā", "Konsultācijā pie pasniedzēja"],
-        answer: 2,
-      },
-      {
-        points: 500,
-        q: "Students jau pusstundu riņķo pa Jelgavas centru. Ko viņš dara?",
-        options: ["Meklē pazudušu maku", "Veic kvartāla izpēti", "Meklē bezmaksas stāvvietu", "Vāc soļus"],
-        answer: 2,
       },
     ],
   },
