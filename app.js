@@ -13,8 +13,8 @@
  * presses "Rādīt rezultātus". Money is only added at the reveal, so nobody can tell
  * early who was right.
  *
- * Host and players talk directly through PeerJS (WebRTC). The public PeerJS
- * server is only used to find each other; game data goes browser to browser.
+ * Moderator and players share the room through Firebase Realtime Database
+ * (settings in firebase-config.js).
  */
 (() => {
   "use strict";
@@ -23,7 +23,6 @@
   const LETTERS = "ABCDEFGH";
   const PASSWORD = "0102";   // casual lock only – visible in the page source
   const ROOM_CODE = "LBTU";  // the room always uses this code
-  const PEER_PREFIX = "gis-viktorina-v1-";
   const ID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
   // ?slot=x keeps a separate saved state per tab (handy for testing several players in one browser)
@@ -57,14 +56,6 @@
     t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
-  }
-  // growing wait between reconnect attempts: 2 s, 4 s, 8 s … up to 60 s (+ small random jitter)
-  function makeBackoff() {
-    let n = 0;
-    return {
-      next() { const d = Math.min(60000, 2000 * 2 ** n) + Math.random() * 1500; n = Math.min(n + 1, 6); return d; },
-      reset() { n = 0; },
-    };
   }
   function lockScroll(on) { document.body.style.overflow = on ? "hidden" : ""; }
   function randomId(n) {
@@ -451,26 +442,59 @@
   }
 
   // ======================================================================
+  //  Firebase Realtime Database (the room lives at rooms/<ROOM_CODE>)
+  //
+  //   host            { sid, at }            – which moderator tab has the room open
+  //   players/<token> { name, online }       – written by each player
+  //   answers/<round>/<token> { choice } | { point } – written once by each player
+  //   public          { phase, current, used, last, gameId, board, closed } – written by moderator
+  //   private/<token> { score, answers }     – each player's own money and answers, by moderator
+  // ======================================================================
+  function getDb() {
+    if (typeof firebase === "undefined" || typeof FIREBASE_CONFIG === "undefined" || !FIREBASE_CONFIG || !FIREBASE_CONFIG.databaseURL) return null;
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    return firebase.database();
+  }
+  const NO_DB = "Savienojuma serveris (Firebase) nav iestatīts. Pārbaudi failu firebase-config.js.";
+  // Firebase drops empty objects and may return arrays as objects – normalise what we read back
+  const obj = (v) => (v && typeof v === "object" ? v : {});
+  const arr = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []);
+  function normLast(l) {
+    if (!l) return null;
+    return { ...l, counts: arr(l.counts), points: arr(l.points) };
+  }
+  function makeListeners() {
+    const list = [];
+    return {
+      on(ref, ev, fn) { ref.on(ev, fn); list.push([ref, ev, fn]); },
+      off() { list.splice(0).forEach(([ref, ev, fn]) => ref.off(ev, fn)); },
+    };
+  }
+
+  // ======================================================================
   //  HOST (moderator)
   // ======================================================================
   const host = {
-    hs: null,          // persisted room state
-    peer: null,
-    conns: new Map(),  // peerId -> { conn, token }
-    retryTimer: null,
-    backoff: makeBackoff(),
-    retries: 0,
+    hs: null,            // room state, also kept in localStorage
+    room: null,          // Firebase ref rooms/<code>
+    sid: randomId(10),   // this tab
+    online: new Set(),   // tokens of connected players
+    subs: makeListeners(),
+    ansRef: null,
+    ansFn: null,
+    live: false,
 
     newState() {
-      // players[token] = { name, answers: { qid: { choice, correct } } }
-      return { code: ROOM_CODE, phase: "board", current: null, used: {}, players: {}, last: null };
+      // players[token] = { name, answers: { qid: { choice | point, dist?, correct } } }
+      return { code: ROOM_CODE, gameId: randomId(6), phase: "board", current: null, used: {}, players: {}, last: null };
     },
     save() { store.set("host", host.hs); },
+    roundKey(qid) { return host.hs.gameId + "_" + qid; },
 
     open() {
       const saved = store.get("host");
       // keep an unfinished game (same code) so a moderator can continue after closing the tab
-      host.hs = saved && saved.code === ROOM_CODE && saved.players ? saved : host.newState();
+      host.hs = saved && saved.code === ROOM_CODE && saved.players && saved.gameId ? saved : host.newState();
       if (!host.hs.used) host.hs.used = {};
       host.save();
       store.set("mode", { mode: "host" });
@@ -484,105 +508,87 @@
     },
 
     connect() {
-      clearTimeout(host.retryTimer);
-      if (host.peer) { try { host.peer.destroy(); } catch (e) {} }
-      host.conns.clear();
+      host.subs.off();
+      host.stopAnswers();
+      const db = getDb();
+      if (!db) { setConn("bad", NO_DB); return; }
       setConn("", "Atver istabu…");
-      if (typeof Peer === "undefined") { setConn("bad", "Neizdevās ielādēt savienojuma bibliotēku. Pārbaudi internetu."); return; }
-      const peer = new Peer(PEER_PREFIX + ROOM_CODE, { debug: 0 });
-      host.peer = peer;
-      peer.on("open", () => {
-        host.retries = 0;
-        host.backoff.reset();
+      host.room = db.ref("rooms/" + ROOM_CODE);
+      host.live = true;
+      host.subs.on(db.ref(".info/connected"), "value", (s) => {
+        if (s.val() !== true) { setConn("", "Savienojas ar serveri…"); return; }
+        const hRef = host.room.child("host");
+        hRef.onDisconnect().remove();
+        hRef.set({ sid: host.sid, at: firebase.database.ServerValue.TIMESTAMP });
         setConn("ok", "Istaba atvērta");
-        host.renderAll();
+        host.broadcast();
       });
-      peer.on("connection", (conn) => {
-        conn.on("data", (d) => host.onData(conn, d));
-        conn.on("close", () => host.drop(conn));
-        conn.on("error", () => host.drop(conn));
-      });
-      peer.on("disconnected", () => {
-        // lost the link to the matchmaking server only – players already connected keep playing.
-        // Reconnect slowly: fast retries get this network blocked by the free server ("429").
-        if (peer.destroyed) return;
-        clearTimeout(host.retryTimer);
-        const wait = host.backoff.next();
-        setConn("", `Savienojums ar serveri pārtrūka. Mēģina vēlreiz pēc ${Math.round(wait / 1000)} s…`);
-        host.retryTimer = setTimeout(() => {
-          if (peer.destroyed || peer.open) return;
-          try { peer.reconnect(); } catch (e) { host.connect(); }
-        }, wait);
-      });
-      peer.on("error", (err) => {
-        if (err.type === "unavailable-id") {
-          // after a reload our previous connection can stay registered for a few seconds;
-          // if it never frees up, the room is open on another device or tab
-          host.retries++;
-          if (host.retries <= 10) {
-            setConn("", "Atver istabu… (mēģinājums " + host.retries + ")");
-            host.retryTimer = setTimeout(() => host.connect(), 3000);
-          } else {
-            setConn("bad", `Istaba ${ROOM_CODE} jau ir atvērta citā ierīcē vai cilnē. Aizver to un pārlādē lapu.`);
-          }
-        } else if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) {
-          if (peer.open || peer.disconnected) return; // the "disconnected" handler retries
-          clearTimeout(host.retryTimer);
-          const wait = host.backoff.next();
-          setConn("bad", `Nav savienojuma ar serveri. Mēģina vēlreiz pēc ${Math.round(wait / 1000)} s…`);
-          host.retryTimer = setTimeout(() => host.connect(), wait);
-        } else if (err.type === "browser-incompatible") {
-          setConn("bad", "Šis pārlūks neatbalsta tiešsaistes spēli.");
+      // another moderator tab/device took over the room
+      host.subs.on(host.room.child("host"), "value", (s) => {
+        const v = s.val();
+        if (v && v.sid && v.sid !== host.sid && host.live) {
+          host.live = false;
+          host.subs.off();
+          host.stopAnswers();
+          setConn("bad", "Istaba tika atvērta citā ierīcē vai cilnē, tāpēc šeit tā ir apturēta. Pārlādē lapu, lai to atvērtu šeit.");
         }
       });
+      host.subs.on(host.room.child("players"), "value", (s) => {
+        const all = obj(s.val());
+        host.online = new Set();
+        Object.entries(all).forEach(([tk, p]) => {
+          if (!p || typeof p !== "object") return;
+          const name = String(p.name || "").trim().slice(0, 20) || "Spēlētājs";
+          if (!host.hs.players[tk]) host.hs.players[tk] = { name, answers: {} };
+          else host.hs.players[tk].name = name;
+          if (p.online) host.online.add(tk);
+        });
+        host.save();
+        if (!host.maybeAutoReveal()) host.broadcast();
+      });
+      host.listenAnswers();
     },
 
-    onlineTokens() {
-      const s = new Set();
-      host.conns.forEach((c) => { if (c.token) s.add(c.token); });
-      return s;
+    // answers arrive only for the question that is open right now
+    listenAnswers() {
+      host.stopAnswers();
+      const hs = host.hs;
+      if (!host.room || !host.live || hs.phase !== "question" || !hs.current) return;
+      host.ansRef = host.room.child("answers/" + host.roundKey(hs.current));
+      host.ansFn = (s) => host.onAnswer(s.key, s.val());
+      host.ansRef.on("child_added", host.ansFn);
     },
+    stopAnswers() {
+      if (host.ansRef && host.ansFn) host.ansRef.off("child_added", host.ansFn);
+      host.ansRef = null;
+      host.ansFn = null;
+    },
+
+    onlineTokens() { return new Set(host.online); },
     score(p) {
       // money counts only for revealed questions
-      return Object.entries(p.answers).reduce(
+      return Object.entries(obj(p.answers)).reduce(
         (s, [qid, a]) => s + (a.correct && host.hs.used[qid] && byId[qid] ? byId[qid].points : 0), 0);
     },
 
-    onData(conn, d) {
-      if (!d || typeof d !== "object") return;
+    onAnswer(token, d) {
       const hs = host.hs;
-      if (d.t === "hello") {
-        const token = String(d.token || "").slice(0, 40);
-        const name = String(d.name || "").trim().slice(0, 20) || "Spēlētājs";
-        if (!token) return;
-        host.conns.set(conn.peer, { conn, token });
-        if (!hs.players[token]) hs.players[token] = { name, answers: {} };
-        else hs.players[token].name = name;
-        host.save();
-        host.broadcast();
-      } else if (d.t === "answer") {
-        const entry = host.conns.get(conn.peer);
-        if (!entry) return;
-        const p = hs.players[entry.token];
-        const q = byId[d.qid];
-        if (!p || !q || hs.phase !== "question" || hs.current !== d.qid) return;
-        if (p.answers[d.qid]) { host.sendTo(entry); return; } // one answer only
-        if (q.type === "map") {
-          const pt = Array.isArray(d.point) ? d.point.map(Number) : [];
-          if (pt.length !== 2 || !pt.every(Number.isFinite) || pt[0] < 54 || pt[0] > 59 || pt[1] < 19 || pt[1] > 30) return;
-          const dist = Math.round(distKm(pt, q.target) * 10) / 10;
-          p.answers[d.qid] = { point: pt, dist, correct: dist <= q.radiusKm };
-        } else {
-          const choice = Number(d.choice);
-          if (!Number.isInteger(choice) || choice < 0 || choice >= q.options.length) return;
-          p.answers[d.qid] = { choice, correct: choice === q.answer };
-        }
-        host.save();
-        if (!host.maybeAutoReveal()) host.broadcast();
+      const q = byId[hs.current];
+      if (!d || typeof d !== "object" || !q || hs.phase !== "question") return;
+      if (!hs.players[token]) hs.players[token] = { name: "Spēlētājs", answers: {} };
+      const p = hs.players[token];
+      if (p.answers[hs.current]) return; // one answer only
+      if (q.type === "map") {
+        const pt = arr(d.point).map(Number);
+        if (pt.length !== 2 || !pt.every(Number.isFinite) || pt[0] < 54 || pt[0] > 59 || pt[1] < 19 || pt[1] > 30) return;
+        const dist = Math.round(distKm(pt, q.target) * 10) / 10;
+        p.answers[hs.current] = { point: pt, dist, correct: dist <= q.radiusKm };
+      } else {
+        const choice = Number(d.choice);
+        if (!Number.isInteger(choice) || choice < 0 || choice >= q.options.length) return;
+        p.answers[hs.current] = { choice, correct: choice === q.answer };
       }
-    },
-    drop(conn) {
-      if (!host.conns.delete(conn.peer)) return;
+      host.save();
       if (!host.maybeAutoReveal()) host.broadcast();
     },
 
@@ -590,7 +596,7 @@
     maybeAutoReveal() {
       const hs = host.hs;
       if (hs.phase !== "question") return false;
-      const online = [...host.onlineTokens()];
+      const online = [...host.online];
       if (!online.length) return false;
       if (online.every((tk) => hs.players[tk] && hs.players[tk].answers[hs.current])) {
         host.reveal();
@@ -619,37 +625,38 @@
       return { qid: hs.current, counts, points, answered, correct, total, pct: total ? Math.round((correct / total) * 100) : null };
     },
 
-    leaderboard(forToken) {
-      const online = host.onlineTokens();
+    leaderboard() {
       return sortRows(Object.entries(host.hs.players).map(([tk, p]) => ({
-        name: p.name, score: host.score(p), online: online.has(tk), me: tk === forToken,
+        k: tk, name: p.name, score: host.score(p), online: host.online.has(tk),
       })));
     },
-    stateFor(token) {
-      const hs = host.hs;
-      const p = hs.players[token] || { name: "", answers: {} };
-      // never send whether the current answer is right before the reveal
-      const answers = {};
-      Object.entries(p.answers).forEach(([qid, a]) => {
-        if (hs.used[qid]) answers[qid] = a;
-        else answers[qid] = a.point ? { point: a.point } : { choice: a.choice };
-      });
-      return {
-        t: "state",
-        phase: hs.phase,
-        current: hs.current,
-        used: hs.used,
-        last: hs.last,
-        reveal: hs.phase === "reveal" ? hs.last : null,
-        board: host.leaderboard(token),
-        me: { name: p.name, score: host.score(p), answers },
-      };
-    },
-    sendTo(entry) {
-      try { if (entry.conn.open) entry.conn.send(host.stateFor(entry.token)); } catch (e) {}
-    },
+
+    // write the shared state for all players in one update
     broadcast() {
-      host.conns.forEach((entry) => { if (entry.token) host.sendTo(entry); });
+      const hs = host.hs;
+      if (host.room && host.live) {
+        const upd = {
+          public: {
+            phase: hs.phase,
+            current: hs.current || null,
+            used: hs.used,
+            last: hs.last || null,
+            gameId: hs.gameId,
+            board: host.leaderboard(),
+            closed: false,
+          },
+        };
+        Object.entries(hs.players).forEach(([tk, p]) => {
+          // never tell a player whether the open question is right before the reveal
+          const answers = {};
+          Object.entries(p.answers).forEach(([qid, a]) => {
+            if (hs.used[qid]) answers[qid] = a;
+            else answers[qid] = a.point ? { point: a.point } : { choice: a.choice };
+          });
+          upd["private/" + tk] = { score: host.score(p), answers };
+        });
+        host.room.update(upd).catch((e) => setConn("bad", "Neizdevās nosūtīt datus: " + e.message));
+      }
       host.renderAll();
     },
 
@@ -660,9 +667,8 @@
         if (hs.used[id] && hs.current !== id) return { kind: "done", mark: "neutral", symbol: "●", word: "IZSPĒLĒTS" };
         return { kind: "open", clickable: hs.phase === "board", live: hs.current === id };
       }, host.pick);
-      const online = host.onlineTokens().size;
-      $("progress").textContent = `${online} / ${Object.keys(hs.players).length}`;
-      renderLeaderboard(host.leaderboard(null));
+      $("progress").textContent = `${host.online.size} / ${Object.keys(hs.players).length}`;
+      renderLeaderboard(host.leaderboard());
       renderPct(hs.last);
       $("statusText").textContent =
         hs.phase === "question" ? "Jautājums atvērts spēlētājiem." :
@@ -700,11 +706,13 @@
       hs.current = id;
       host.save();
       host.broadcast();
+      host.listenAnswers();
       host.syncOverlay();
     },
     reveal() {
       const hs = host.hs;
       if (hs.phase !== "question") return;
+      host.stopAnswers();
       hs.last = host.roundStats();
       hs.used[hs.current] = true;
       hs.phase = "reveal";
@@ -723,7 +731,17 @@
     },
     reset() {
       const hs = host.hs;
-      Object.values(hs.players).forEach((p) => { p.answers = {}; });
+      host.stopAnswers();
+      // players who are not connected right now are removed from the room
+      Object.keys(hs.players).forEach((tk) => {
+        if (host.online.has(tk)) { hs.players[tk].answers = {}; return; }
+        delete hs.players[tk];
+        if (host.room && host.live) {
+          host.room.child("players/" + tk).remove().catch(() => {});
+          host.room.child("private/" + tk).remove().catch(() => {});
+        }
+      });
+      hs.gameId = randomId(6); // new answer slots, so everyone can answer again
       hs.used = {};
       hs.last = null;
       hs.phase = "board";
@@ -733,9 +751,13 @@
       host.syncOverlay();
     },
     leave() {
-      host.conns.forEach((entry) => { try { entry.conn.send({ t: "closed" }); } catch (e) {} });
-      clearTimeout(host.retryTimer);
-      setTimeout(() => { try { host.peer && host.peer.destroy(); } catch (e) {} host.peer = null; }, 300);
+      if (host.room && host.live) {
+        host.room.child("public/closed").set(true);
+        host.room.child("host").remove();
+      }
+      host.live = false;
+      host.subs.off();
+      host.stopAnswers();
       host.hs = null;
       showHome();
     },
@@ -751,17 +773,20 @@
   // ======================================================================
   const player = {
     session: null,   // { name, token }
-    peer: null,
-    conn: null,
-    st: null,        // last state from host
+    room: null,
+    subs: makeListeners(),
+    pub: null,       // rooms/<code>/public
+    priv: null,      // rooms/<code>/private/<token>
+    st: null,        // combined state used for drawing
     joined: false,
-    timer: null,
-    attempt: 0,
+    hostOnline: false,
 
     start(session, fresh) {
       player.session = session;
       player.joined = !fresh;
       player.st = null;
+      player.pub = null;
+      player.priv = null;
       store.set("player", session);
       store.set("mode", { mode: "player" });
       showGame("player");
@@ -774,51 +799,38 @@
     },
 
     connect() {
-      clearTimeout(player.timer);
-      if (typeof Peer === "undefined") { player.fail("Neizdevās ielādēt savienojuma bibliotēku. Pārbaudi internetu."); return; }
+      player.subs.off();
+      const db = getDb();
+      if (!db) { player.fail(NO_DB); return; }
       setConn("", player.joined ? "Atjauno savienojumu…" : "Pievienojas istabai…");
       $("statusText").textContent = "";
-      const go = () => {
-        if (player.conn) { try { player.conn.close(); } catch (e) {} }
-        const conn = player.peer.connect(PEER_PREFIX + ROOM_CODE, { reliable: true });
-        player.conn = conn;
-        const openTimeout = setTimeout(() => { if (!conn.open) player.retry(); }, 9000);
-        conn.on("open", () => {
-          clearTimeout(openTimeout);
-          player.attempt = 0;
-          conn.send({ t: "hello", token: player.session.token, name: player.session.name });
-        });
-        conn.on("data", (d) => player.onData(d));
-        conn.on("close", () => { if (player.conn === conn) player.retry(); });
-        conn.on("error", () => { if (player.conn === conn) player.retry(); });
-      };
-      if (player.peer && !player.peer.destroyed && player.peer.open) { go(); return; }
-      if (player.peer) { try { player.peer.destroy(); } catch (e) {} }
-      const peer = new Peer({ debug: 0 });
-      player.peer = peer;
-      peer.on("open", go);
-      // a player only needs the matchmaking server to (re)join; an open game link keeps working
-      peer.on("disconnected", () => { if (!peer.destroyed && !(player.conn && player.conn.open)) player.retry(); });
-      peer.on("error", (err) => {
-        if (err.type === "peer-unavailable") {
-          if (!player.joined) player.fail("Istaba vēl nav atvērta. Pagaidi, kamēr moderators to atver, un mēģini vēlreiz.");
-          else player.retry();
-        } else if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) {
-          player.retry();
-        } else if (err.type === "browser-incompatible") {
-          player.fail("Šis pārlūks neatbalsta tiešsaistes spēli.");
-        }
+      const token = player.session.token;
+      player.room = db.ref("rooms/" + ROOM_CODE);
+      const me = player.room.child("players/" + token);
+      player.subs.on(db.ref(".info/connected"), "value", (s) => {
+        if (s.val() !== true) { setConn("bad", "Nav savienojuma ar serveri. Atjauno…"); return; }
+        me.onDisconnect().update({ online: false });
+        me.set({ name: player.session.name, online: true });
+        player.showConn();
       });
+      player.subs.on(player.room.child("host"), "value", (s) => {
+        player.hostOnline = !!s.val();
+        if (!player.hostOnline && !player.joined) {
+          player.fail("Istaba vēl nav atvērta. Pagaidi, kamēr moderators to atver, un mēģini vēlreiz.");
+          return;
+        }
+        if (player.hostOnline) player.joined = true;
+        player.showConn();
+        player.update();
+      });
+      player.subs.on(player.room.child("public"), "value", (s) => { player.pub = s.val(); player.update(); });
+      player.subs.on(player.room.child("private/" + token), "value", (s) => { player.priv = s.val(); player.update(); });
     },
-    retry() {
+    showConn() {
       if (mode !== "player") return;
-      clearTimeout(player.timer);
-      player.attempt++;
-      if (!player.joined && player.attempt > 2) { player.fail("Neizdevās pievienoties istabai. Pārbaudi internetu un mēģini vēlreiz."); return; }
-      // slow, growing delays – fast retries get the network blocked by the free server ("429")
-      const wait = Math.min(30000, 2000 * 2 ** (player.attempt - 1)) + Math.random() * 1500;
-      setConn("bad", `Savienojums pārtrūka. Mēģina vēlreiz pēc ${Math.round(wait / 1000)} s…`);
-      player.timer = setTimeout(() => player.connect(), wait);
+      if (!player.joined) return;
+      if (player.hostOnline) setConn("ok", "Savienots ar istabu");
+      else setConn("bad", "Moderators šobrīd nav tiešsaistē. Gaidi…");
     },
     fail(msg) {
       player.cleanup();
@@ -827,27 +839,40 @@
       $("joinErr").textContent = msg;
     },
     cleanup() {
-      clearTimeout(player.timer);
-      try { player.conn && player.conn.close(); } catch (e) {}
-      try { player.peer && player.peer.destroy(); } catch (e) {}
-      player.conn = null;
-      player.peer = null;
+      player.subs.off();
+      if (player.room && player.session) {
+        const me = player.room.child("players/" + player.session.token);
+        me.update({ online: false }).catch(() => {});
+        me.onDisconnect().cancel();
+      }
+      player.room = null;
     },
 
-    onData(d) {
-      if (!d || typeof d !== "object") return;
-      if (d.t === "closed") {
+    update() {
+      const pub = player.pub;
+      if (!pub || !player.joined || mode !== "player") return;
+      if (pub.closed && !player.hostOnline) {
         player.cleanup();
         store.del("player");
         showHome();
         toast("Moderators slēdza istabu.");
         return;
       }
-      if (d.t !== "state") return;
-      player.joined = true;
-      setConn("ok", "Savienots ar istabu");
-      player.st = d;
-      player.apply(d);
+      const token = player.session.token;
+      const priv = obj(player.priv);
+      const last = normLast(pub.last);
+      const st = {
+        phase: pub.phase || "board",
+        current: pub.current || null,
+        used: obj(pub.used),
+        last,
+        reveal: pub.phase === "reveal" ? last : null,
+        gameId: pub.gameId,
+        board: arr(pub.board).map((r) => ({ ...r, me: r.k === token })),
+        me: { score: priv.score || 0, answers: obj(priv.answers) },
+      };
+      player.st = st;
+      player.apply(st);
     },
 
     renderBoard() {
@@ -874,16 +899,17 @@
         "Gaidi, kamēr moderators izvēlēsies nākamo jautājumu.";
 
       const id = st.current;
-      if (st.phase === "question" && id) {
+      if (st.phase === "question" && id && byId[id]) {
         hideResult();
         const a = st.me.answers[id];
-        const k = id + ":" + (a ? (a.point ? a.point.join(",") : a.choice) : "-");
+        const pt = a && a.point ? arr(a.point) : null;
+        const k = id + ":" + (a ? (pt ? pt.join(",") : a.choice) : "-");
         if (shownQKey !== k) {
           shownQKey = k;
           showQuestion(id, a ? {
             interactive: true,
-            picked: a.point ? null : a.choice,
-            pickedPoint: a.point || null,
+            picked: pt ? null : a.choice,
+            pickedPoint: pt,
             note: "Atbilde pieņemta. Rezultāti parādīsies, kad visi būs atbildējuši.",
           } : {
             interactive: true,
@@ -891,11 +917,17 @@
             onAnswer: (choice) => player.answer(id, choice),
           });
         }
-      } else if (st.phase === "reveal" && id && st.reveal) {
-        if (shownQKey) hideQuestion();
-        if (shownResult !== id) {
-          const a = st.me.answers[id];
-          const res = a && "correct" in a ? a : null;
+      } else if (st.phase === "reveal" && id && byId[id] && st.reveal) {
+        const a = st.me.answers[id];
+        const res = a && "correct" in a ? { ...a, point: a.point ? arr(a.point) : undefined } : null;
+        // public and private data can arrive a moment apart: if this player answered but the
+        // result is not here yet, keep waiting instead of showing "Tu neatbildēji"
+        const rk = id + ":" + (res ? res.correct : "none") + ":" + st.me.score;
+        if (a && !res) {
+          // wait for the private update
+        } else if (shownResult !== id || player.resultKey !== rk) {
+          if (shownQKey) hideQuestion();
+          player.resultKey = rk;
           const dist = res && res.point ? `Tava atzīme: ${String(res.dist).replace(".", ",")} km no mērķa. ` : "";
           showResult(id, res, st.reveal, `${dist}Kontā tagad: ${euro(st.me.score)}`);
         }
@@ -907,16 +939,23 @@
 
     // value = option index, or [lat, lon] for map questions
     answer(id, value) {
-      if (player.conn && player.conn.open) {
-        player.conn.send(Array.isArray(value) ? { t: "answer", qid: id, point: value } : { t: "answer", qid: id, choice: value });
-        $("qNote").textContent = "Atbilde nosūtīta…";
-        $("qNote").hidden = false;
-      } else {
-        shownQKey = null; // redraw the question so the player can try again
-        if (player.st) player.apply(player.st);
-        $("qNote").textContent = "Nav savienojuma ar istabu. Atbilde netika nosūtīta – mēģini vēlreiz, kad savienojums atjaunosies.";
-        $("qNote").hidden = false;
-      }
+      const st = player.st;
+      if (!player.room || !st || !st.gameId) return;
+      const ref = player.room.child(`answers/${st.gameId}_${id}/${player.session.token}`);
+      $("qNote").textContent = "Atbilde tiek nosūtīta…";
+      $("qNote").hidden = false;
+      ref.set(Array.isArray(value) ? { point: value } : { choice: value })
+        .then(() => { if (shownQKey && shownQKey.endsWith(":-")) { $("qNote").textContent = "Atbilde nosūtīta. Gaidi rezultātus."; } })
+        .catch((e) => {
+          if (String(e && e.code).toUpperCase().includes("PERMISSION")) {
+            $("qNote").textContent = "Uz šo jautājumu tu jau esi atbildējis.";
+            return;
+          }
+          shownQKey = null; // redraw the question so the player can try again
+          if (player.st) player.apply(player.st);
+          $("qNote").textContent = "Neizdevās nosūtīt atbildi. Pārbaudi internetu un mēģini vēlreiz.";
+          $("qNote").hidden = false;
+        });
     },
 
     leave() {
