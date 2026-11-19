@@ -232,7 +232,7 @@ const CATEGORIES = [
       {
         points: 500,
         // PDF 500 punktu slaids ir tukšs – pagaidām atstāts iepriekšējais jautājums
-        q: "Kurš dzīvnieks būtu labākais ĢIS speciālists?",
+        q: "Kurš dzīvnieks būtu labākais GIS speciālists?",
         options: ["Kurmis", "Zelta zivtiņa", "Kaķis", "Pingvīns"],
         answer: 0,
         explain: "Jo kurmis zina visu par pazemes slāņiem.",

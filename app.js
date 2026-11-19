@@ -1,5 +1,5 @@
 /*
- * ĢIS Viktorīna – game logic.
+ * GIS Viktorīna – game logic.
  *
  * Two roles:
  *   host   – the moderator (usually on the projector). Their browser IS the room:
