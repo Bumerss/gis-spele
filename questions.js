@@ -13,7 +13,7 @@
  * SVARĪGI: ja maini jautājumus pēc tam, kad kāds jau spēlējis,
  * palielini QUESTIONS_VERSION, lai notīrītu veco saglabāto progresu.
  */
-const QUESTIONS_VERSION = 1;
+const QUESTIONS_VERSION = 2;
 
 const CATEGORIES = [
   {
@@ -191,24 +191,20 @@ const CATEGORIES = [
     questions: [
       {
         points: 100,
-        draft: true,
-        q: "Telefonam beidzies akumulators, un tu esi mežā. Kā vislabāk atrast ceļu?",
-        options: ["Uzņemt selfiju", "Ar karti un kompasu", "Pajautāt kokam", "Gaidīt, kamēr parādīsies WiFi"],
-        answer: 1,
+        q: "Kāpēc vista pārgāja pāri ceļam?",
+        options: ["Lai nokļūtu otrā pusē", "Bēga no zupas", "Meklēja WiFi", "GPS tā teica"],
+        answer: 0,
       },
       {
         points: 200,
-        draft: true,
-        q: "Patiesība vai mīts: Grenlande ir tikpat liela kā Āfrika.",
-        options: ["Patiesība", "Mīts"],
-        answer: 1,
-        explain: "Merkatora projekcija stipri palielina apgabalus pie poliem. Patiesībā Āfrika ir aptuveni 14 reizes lielāka par Grenlandi.",
+        q: "Kurš dzīvnieks būtu labākais ĢIS speciālists?",
+        options: ["Kurmis, jo zina visu par pazemes slāņiem", "Zelta zivtiņa", "Kaķis", "Pingvīns"],
+        answer: 0,
       },
       {
         points: 300,
-        draft: true,
-        q: "Kuram no šiem dzīvniekiem ir “iebūvēts GPS”, ar ko tas atrod mājas simtiem kilometru attālumā?",
-        options: ["Zelta zivtiņai", "Gliemezim", "Pasta balodim", "Kāmim"],
+        q: "Kas ir ātrāks par gaismu?",
+        options: ["Skaņa", "Gepards", "Students, kad pasniedzējs saka “šodien beigsim agrāk”", "Latvijas internets"],
         answer: 2,
       },
       {
