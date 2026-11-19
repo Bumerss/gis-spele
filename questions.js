@@ -143,6 +143,7 @@ const CATEGORIES = [
   },
   {
     title: "Dendroloģijas izaicinājums",
+    short: "Dendroloģija", // shorter title for narrow phone screens
     questions: [
       {
         points: 100,
