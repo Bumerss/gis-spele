@@ -73,7 +73,7 @@
   .home .eyebrow { font-size: 13px; letter-spacing: .26em; font-weight: 700; color: var(--mint); }
   .home h1 { margin: 0; font-family: var(--serif); font-weight: 900; font-size: clamp(44px, 9vw, 84px); line-height: 1; color: var(--cream); }
   .home .lede { margin: 0; color: var(--mint-soft); font-size: 17px; max-width: 520px; }
-  .home-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; width: 100%; max-width: 980px; text-align: left; }
+  .home-cards { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; width: 100%; max-width: 760px; text-align: left; }
   .card {
     background: rgba(15,61,46,.85); border-radius: var(--radius); padding: 22px;
     box-shadow: inset 0 0 0 1px rgba(95,211,165,.35), 0 14px 30px rgba(0,0,0,.3);
@@ -240,8 +240,10 @@
   .r-inner {
     position: relative; z-index: 1; min-height: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 32px 16px; gap: 14px; max-width: 560px; margin: 0 auto;
+    text-align: center; padding: 32px 16px; gap: 14px; max-width: 600px; margin: 0 auto;
   }
+  .note.small { padding: 22px 16px; }
+  .note.small .r-points { font-size: clamp(44px, 10vw, 72px); }
   .note {
     width: 100%; border: 1.5px solid rgba(246,241,220,.55); outline: 1px solid rgba(246,241,220,.25); outline-offset: 6px;
     border-radius: var(--radius); padding: 32px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -263,13 +265,45 @@
     margin-top: 10px; width: 100%; max-width: 420px; min-height: 56px; border: none; border-radius: var(--radius);
     background: var(--cream); font-weight: 700; font-size: 17px; box-shadow: 0 6px 18px rgba(0,0,0,.25);
   }
-  #result.correct .r-btn, #end .r-btn { color: var(--green); }
+  #result.correct .r-btn { color: var(--green); }
   #result.wrong .r-btn { color: var(--red); }
   .r-btn:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
   #result.show .r-inner > * { animation: pop .35s ease-out both; }
   @keyframes pop { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: none; } }
 
-  #end { background: var(--bg); color: var(--cream); }
+  #result.neutral { background: var(--bg-2); }
+
+  /* answer chart */
+  .chart { display: flex; flex-direction: column; gap: 10px; width: 100%; text-align: left; }
+  .bar-row {
+    display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: var(--radius); background: rgba(255,255,255,.05);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .bar-row .letter {
+    width: 40px; height: 40px; display: grid; place-items: center; border-radius: 3px;
+    background: rgba(255,255,255,.12); color: var(--cream); font-family: var(--serif); font-weight: 800; font-size: 18px;
+  }
+  .bar-row .txt { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .bar-row .lbl { font-size: 15px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .bar-row .lbl em { font-style: normal; font-size: 11px; letter-spacing: .12em; font-weight: 800; }
+  .bar-row .track { height: 14px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .bar-row .track b { display: block; height: 100%; border-radius: 999px; background: #7d958b; min-width: 4px; }
+  .bar-row .num { font-family: var(--serif); font-weight: 900; font-size: 26px; color: var(--cream); min-width: 28px; text-align: right; }
+  .bar-row.correct { background: rgba(95,211,165,.16); box-shadow: inset 0 0 0 2px var(--mint); }
+  .bar-row.correct .letter { background: var(--mint); color: var(--ink); }
+  .bar-row.correct .track b { background: var(--mint); }
+  .bar-row.correct .lbl em { color: var(--mint); }
+  .bar-row.mine:not(.correct) .lbl em { color: var(--coral); }
+  /* on the green / red result screens */
+  #result .bar-row { background: rgba(0,0,0,.16); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+  #result .bar-row .track { background: rgba(255,255,255,.18); }
+  #result .bar-row .track b { background: rgba(255,255,255,.5); }
+  #result .bar-row.correct { background: rgba(246,241,220,.16); box-shadow: inset 0 0 0 2px var(--cream); }
+  #result .bar-row.correct .letter { background: var(--cream); color: var(--green); }
+  #result .bar-row.correct .track b { background: var(--cream); }
+  #result .bar-row.correct .lbl em { color: var(--cream); }
+  #result .bar-row.mine:not(.correct) .lbl em { color: #ffd5d0; }
 
   /* password dialog */
   #pw { background: rgba(3,16,12,.75); z-index: 30; }
@@ -397,7 +431,7 @@
   <section class="home" id="home" hidden>
     <span class="eyebrow">SPĒLES NAUDA · LATVIJA</span>
     <h1>ĢIS Viktorīna</h1>
-    <p class="lede">Zeme, daba, kartes un augstumi. Izvēlies, kā spēlēsi.</p>
+    <p class="lede">Zeme, daba, kartes un augstumi. Pievienojies istabai ar kodu.</p>
     <div class="home-cards">
       <form class="card primary" id="joinForm" autocomplete="off">
         <h2>Pievienoties spēlei</h2>
@@ -415,14 +449,9 @@
       </form>
       <div class="card">
         <h2>Moderators</h2>
-        <p class="grow">Izveido istabu, izvēlies jautājumus un vadi spēli. Spēlētāji redz jautājumu automātiski.</p>
+        <p class="grow">Atver istabu, izvēlies jautājumus un vadi spēli. Spēlētājiem jautājums atveras automātiski.</p>
         <p class="err" id="hostErr" aria-live="polite"></p>
-        <button class="btn" type="button" id="hostBtn">Izveidot istabu</button>
-      </div>
-      <div class="card">
-        <h2>Spēlēt vienam</h2>
-        <p class="grow">Izvēlies jautājumus pats savā tempā. Progress saglabājas arī pēc lapas pārlādes.</p>
-        <button class="btn" type="button" id="soloBtn">Spēlēt vienam</button>
+        <button class="btn" type="button" id="hostBtn">Atvērt istabu</button>
       </div>
     </div>
   </section>
@@ -496,13 +525,14 @@
       <div>
         <p class="q-hint" id="qHint">IZVĒLIES VIENU ATBILDI</p>
         <div class="options" id="qOpts"></div>
+        <div class="chart" id="qChart" hidden></div>
         <p class="q-note" id="qNote"></p>
         <div class="host-box" id="hostBox" hidden>
           <div class="host-live">
             <div><b id="liveAnswered">0 / 0</b><span>ATBILDĒJUŠI</span></div>
-            <div><b id="liveCorrect">0</b><span>PAREIZI</span></div>
+            <div id="livePctBox" hidden><b id="livePct">0%</b><span>PAREIZI</span></div>
           </div>
-          <button class="btn solid" type="button" id="endQBtn">Jautājums pabeigts</button>
+          <button class="btn solid" type="button" id="endQBtn">Rādīt rezultātus</button>
         </div>
       </div>
     </div>
@@ -529,31 +559,16 @@
 <!-- result -->
 <section class="overlay" id="result" role="dialog" aria-modal="true" aria-labelledby="rTitle">
   <div class="r-inner">
-    <div class="note">
-      <span class="eyebrow">SPĒLES NAUDA</span>
+    <div class="note small">
+      <span class="eyebrow" id="rEyebrow">SPĒLES NAUDA</span>
       <p class="r-points" id="rPoints"></p>
       <span class="rule"></span>
       <h1 class="r-title" id="rTitle"></h1>
     </div>
     <p class="r-sub" id="rSub"></p>
-    <p class="r-answer" id="rAnswer"></p>
+    <div class="chart" id="rChart"></div>
     <p class="r-explain" id="rExplain"></p>
-    <p class="r-wait" id="rWait" hidden><i></i>Gaidi, kamēr moderators pabeigs jautājumu</p>
-    <button class="r-btn" id="rClose" type="button">Atpakaļ uz laukumu</button>
-  </div>
-</section>
-
-<!-- end (solo) -->
-<section class="overlay" id="end" role="dialog" aria-modal="true" aria-labelledby="eTitle">
-  <div class="r-inner">
-    <div class="note">
-      <span class="eyebrow">SPĒLE BEIGUSIES</span>
-      <p class="r-points" id="ePoints"></p>
-      <span class="rule"></span>
-      <h1 class="r-title" id="eTitle">Apsveicam!</h1>
-    </div>
-    <p class="r-sub" id="eSub"></p>
-    <button class="r-btn" id="eClose" type="button">Apskatīt laukumu</button>
+    <p class="r-wait" id="rWait"><i></i>Gaidi nākamo jautājumu</p>
   </div>
 </section>
 

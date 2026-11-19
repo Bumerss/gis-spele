@@ -1,11 +1,17 @@
 /*
  * ĢIS Viktorīna – game logic.
  *
- * Three modes:
- *   solo   – one player picks questions alone (progress in localStorage).
- *   host   – the moderator. Their browser IS the room: it keeps every player's
- *            score and answers, and sends the current state to all players.
- *   player – joins a room by code; the question opens when the moderator picks it.
+ * Two roles:
+ *   host   – the moderator (usually on the projector). Their browser IS the room:
+ *            it keeps every player's answers and sends the current state to all players.
+ *            The moderator screen never shows the correct answer before the reveal.
+ *   player – joins the room by code; a question opens when the moderator picks it.
+ *
+ * Round flow:  board -> question (players answer once) -> reveal (answer chart for
+ * everyone, correct option highlighted) -> board ...
+ * The reveal starts when every connected player has answered, or when the moderator
+ * presses "Rādīt rezultātus". Money is only added at the reveal, so nobody can tell
+ * early who was right.
  *
  * Host and players talk directly through PeerJS (WebRTC). The public PeerJS
  * server is only used to find each other; game data goes browser to browser.
@@ -15,9 +21,10 @@
 
   const $ = (id) => document.getElementById(id);
   const LETTERS = "ABCDEFGH";
-  const PASSWORD = "0102"; // casual lock only – visible in the page source
+  const PASSWORD = "0102";   // casual lock only – visible in the page source
+  const ROOM_CODE = "LBTU";  // the room always uses this code
   const PEER_PREFIX = "gis-viktorina-v1-";
-  const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const ID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
   // ?slot=x keeps a separate saved state per tab (handy for testing several players in one browser)
   const SLOT = new URLSearchParams(location.search).get("slot") || "";
@@ -27,8 +34,6 @@
     set(name, v) { try { localStorage.setItem(key(name), JSON.stringify(v)); } catch (e) {} },
     del(name) { try { localStorage.removeItem(key(name)); } catch (e) {} },
   };
-  // solo progress keeps its original key so existing players don't lose it
-  const SOLO_KEY = "gis-spele" + (SLOT ? "-" + SLOT : "") + "-v" + QUESTIONS_VERSION;
 
   // ---- questions ----
   const byId = {};
@@ -36,7 +41,6 @@
     cat.questions.forEach((q, i) => { byId[c + "-" + i] = { ...q, cat: cat.title, level: i }; })
   );
   const TOTAL = Object.keys(byId).length;
-  const MAX_POINTS = Object.values(byId).reduce((s, q) => s + q.points, 0);
   const euro = (n) => n + " €";
 
   // ---- small DOM helpers ----
@@ -59,7 +63,7 @@
     let s = "";
     const a = new Uint32Array(n);
     crypto.getRandomValues(a);
-    for (let i = 0; i < n; i++) s += CODE_CHARS[a[i] % CODE_CHARS.length];
+    for (let i = 0; i < n; i++) s += ID_CHARS[a[i] % ID_CHARS.length];
     return s;
   }
 
@@ -96,13 +100,13 @@
     if (h) h();
   });
   function anyOverlayOpen() {
-    return ["question", "result", "end", "pw"].some((id) => $(id).classList.contains("show"));
+    return ["question", "result", "pw"].some((id) => $(id).classList.contains("show"));
   }
 
   // ======================================================================
   //  Shared rendering
   // ======================================================================
-  let mode = null; // 'solo' | 'host' | 'player'
+  let mode = null; // 'host' | 'player'
 
   function amountEl(points) {
     const s = el("span", "amount", points + " ");
@@ -110,7 +114,7 @@
     return s;
   }
 
-  // status per tile: { kind: 'open'|'done', mark?: 'ok'|'bad'|'neutral', markText, clickable, live }
+  // tileInfo(id) -> { kind: 'open'|'done', mark, symbol, word, live }
   function renderBoard(tileInfo, onPick) {
     const board = $("board");
     board.innerHTML = "";
@@ -130,8 +134,8 @@
           const m = el("span", "mark " + info.mark, info.symbol);
           m.appendChild(el("span", "word", " " + info.word));
           t.appendChild(m);
-          t.setAttribute("aria-label", `${cat.title}, ${euro(q.points)} – ${info.word.toLowerCase()}`);
           t.setAttribute("role", "img");
+          t.setAttribute("aria-label", `${cat.title}, ${euro(q.points)} – ${info.word.toLowerCase()}`);
         } else {
           t = el(info.clickable ? "button" : "div", "tile" + (info.live ? " live" : ""));
           if (info.clickable) {
@@ -183,83 +187,124 @@
       : "istabā nebija neviena spēlētāja";
   }
 
+  // answer distribution: one row per option, correct option highlighted
+  function renderChart(box, qid, reveal, myChoice) {
+    const q = byId[qid];
+    box.innerHTML = "";
+    const max = Math.max(1, ...reveal.counts);
+    q.options.forEach((text, i) => {
+      const isCorrect = i === q.answer;
+      const row = el("div", "bar-row" + (isCorrect ? " correct" : "") + (i === myChoice ? " mine" : ""));
+      row.appendChild(el("span", "letter", LETTERS[i]));
+      const txt = el("div", "txt");
+      const lbl = el("div", "lbl");
+      lbl.appendChild(el("span", null, text));
+      const tags = [];
+      if (isCorrect) tags.push("✓ PAREIZĀ");
+      if (i === myChoice) tags.push("TAVA ATBILDE");
+      if (tags.length) lbl.appendChild(el("em", null, tags.join(" · ")));
+      txt.appendChild(lbl);
+      const track = el("div", "track");
+      const bar = el("b");
+      bar.style.width = Math.round((reveal.counts[i] / max) * 100) + "%";
+      track.appendChild(bar);
+      txt.appendChild(track);
+      row.appendChild(txt);
+      row.appendChild(el("span", "num", String(reveal.counts[i])));
+      row.setAttribute("aria-label", `${LETTERS[i]}. ${text}: ${reveal.counts[i]}${isCorrect ? ", pareizā atbilde" : ""}`);
+      box.appendChild(row);
+    });
+  }
+
   function setConn(state, text) {
     $("conn").className = "conn " + (state || "");
     $("connText").textContent = text;
   }
-
   function sortRows(rows) {
     return rows.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "lv"));
   }
 
   // ---- question overlay ----
-  // opts: { interactive, onAnswer, hostView, picked, note }
-  let shownQ = null;
+  // opts: { interactive, onAnswer, picked, note, hostView, reveal }
+  let shownQKey = null;
   function showQuestion(id, opts) {
     const q = byId[id];
-    shownQ = id;
     $("qCat").textContent = q.cat;
     $("qPts").textContent = euro(q.points);
     $("qText").textContent = q.q;
     const img = $("qImg");
     if (q.image) { img.src = q.image; img.alt = "Attēls jautājumam"; img.hidden = false; }
     else { img.hidden = true; img.removeAttribute("src"); }
+
     const optsBox = $("qOpts");
     optsBox.innerHTML = "";
+    const answered = opts.picked != null;
     q.options.forEach((text, i) => {
       const isBtn = !!opts.interactive;
       const b = el(isBtn ? "button" : "div", "opt");
       if (isBtn) {
         b.type = "button";
-        b.addEventListener("click", () => {
-          optsBox.querySelectorAll("button").forEach((x) => { x.disabled = true; });
-          b.classList.add("picked");
-          opts.onAnswer(i);
-        }, { once: true });
+        if (answered) b.disabled = true;
+        else {
+          b.addEventListener("click", () => {
+            optsBox.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+            b.classList.add("picked");
+            opts.onAnswer(i);
+          }, { once: true });
+        }
       }
+      if (i === opts.picked) b.classList.add("picked");
       b.appendChild(el("span", "letter", LETTERS[i]));
       b.appendChild(el("span", null, text));
-      if (opts.hostView && i === q.answer) {
-        b.classList.add("correct");
-        b.appendChild(el("span", "tag", "PAREIZĀ"));
-      }
+      if (i === opts.picked) b.appendChild(el("span", "tag", "TAVA ATBILDE"));
       optsBox.appendChild(b);
     });
-    $("qHint").textContent = opts.hostView ? "ATBILŽU VARIANTI" : "IZVĒLIES VIENU ATBILDI";
+
+    const chart = $("qChart");
+    if (opts.reveal) {
+      optsBox.hidden = true;
+      chart.hidden = false;
+      renderChart(chart, id, opts.reveal, null);
+    } else {
+      optsBox.hidden = false;
+      chart.hidden = true;
+    }
+    $("qHint").textContent = opts.reveal ? "KĀ ATBILDĒJA SPĒLĒTĀJI" : opts.hostView ? "ATBILŽU VARIANTI" : answered ? "TAVA ATBILDE PIEŅEMTA" : "IZVĒLIES VIENU ATBILDI";
     $("qNote").textContent = opts.note || "";
     $("qNote").hidden = !opts.note;
     $("hostBox").hidden = !opts.hostView;
+
+    const wasOpen = $("question").classList.contains("show");
     $("question").classList.add("show");
-    $("question").scrollTop = 0;
+    if (!wasOpen) $("question").scrollTop = 0;
     document.body.classList.add("q-open");
     lockScroll(true);
-    if (opts.interactive && optsBox.firstChild) optsBox.firstChild.focus({ preventScroll: true });
+    if (opts.interactive && !answered && optsBox.firstChild) optsBox.firstChild.focus({ preventScroll: true });
   }
   function hideQuestion() {
-    shownQ = null;
+    shownQKey = null;
     $("question").classList.remove("show");
     document.body.classList.remove("q-open");
     if (!anyOverlayOpen()) lockScroll(false);
   }
 
-  // ---- result overlay ----
+  // ---- player result overlay (shown at the reveal) ----
   let shownResult = null;
-  function showResult(id, a, { sub, closable }) {
+  function showResult(id, a, reveal, sub) {
     const q = byId[id];
     shownResult = id;
     const box = $("result");
-    box.className = "overlay show " + (a.correct ? "correct" : "wrong");
-    $("rTitle").textContent = a.correct ? "Pareizi!" : "Nepareizi!";
-    $("rPoints").textContent = (a.correct ? "+" : "") + euro(q.points);
-    $("rPoints").classList.toggle("missed", !a.correct);
+    const state = !a ? "neutral" : a.correct ? "correct" : "wrong";
+    box.className = "overlay show " + state;
+    $("rEyebrow").textContent = q.cat.toUpperCase();
+    $("rTitle").textContent = !a ? "Tu neatbildēji" : a.correct ? "Pareizi!" : "Nepareizi!";
+    $("rPoints").textContent = (a && a.correct ? "+" : "") + euro(q.points);
+    $("rPoints").classList.toggle("missed", !(a && a.correct));
     $("rSub").textContent = sub;
-    $("rAnswer").textContent = a.correct ? "" : `Pareizā atbilde: ${LETTERS[q.answer]}. ${q.options[q.answer]}`;
+    renderChart($("rChart"), id, reveal, a ? a.choice : null);
     $("rExplain").textContent = q.explain || "";
-    $("rClose").hidden = !closable;
-    $("rWait").hidden = closable;
     box.scrollTop = 0;
     lockScroll(true);
-    if (closable) $("rClose").focus({ preventScroll: true });
   }
   function hideResult() {
     shownResult = null;
@@ -284,7 +329,6 @@
     mode = null;
     store.del("mode");
     hideQuestion(); hideResult();
-    $("end").classList.remove("show");
     $("game").hidden = true;
     $("home").hidden = false;
     lockScroll(false);
@@ -293,154 +337,52 @@
     mode = m;
     $("home").hidden = true;
     $("game").hidden = false;
-    $("layout").classList.toggle("solo", m === "solo");
-    $("aside").hidden = m === "solo";
     $("statMoney").hidden = m === "host";
-    $("statRoom").hidden = m === "solo";
-    $("resetBtn").hidden = m === "player";
-    $("modeLabel").textContent =
-      m === "host" ? "MODERATORS · SPĒLES NAUDA" : m === "player" ? "SPĒLĒTĀJS · SPĒLES NAUDA" : "SPĒLES NAUDA · LATVIJA";
-    $("progressLabel").textContent = m === "host" ? "SPĒLĒTĀJI" : m === "player" ? "JAUTĀJUMI" : "ATBILDĒTI";
+    $("resetBtn").hidden = m !== "host";
+    $("modeLabel").textContent = m === "host" ? "MODERATORS · SPĒLES NAUDA" : "SPĒLĒTĀJS · SPĒLES NAUDA";
+    $("progressLabel").textContent = m === "host" ? "SPĒLĒTĀJI" : "JAUTĀJUMI";
+    $("roomCode").textContent = ROOM_CODE;
   }
-
-  // ======================================================================
-  //  SOLO
-  // ======================================================================
-  const solo = {
-    state: null,
-    empty() { return { answered: {}, open: null, result: null, endSeen: false }; },
-    load() {
-      try {
-        const s = JSON.parse(localStorage.getItem(SOLO_KEY));
-        if (s && typeof s === "object" && s.answered) return { ...solo.empty(), ...s };
-      } catch (e) {}
-      return solo.empty();
-    },
-    save() { try { localStorage.setItem(SOLO_KEY, JSON.stringify(solo.state)); } catch (e) {} },
-    score() {
-      return Object.entries(solo.state.answered)
-        .reduce((s, [id, a]) => s + (a.correct && byId[id] ? byId[id].points : 0), 0);
-    },
-    start() {
-      store.set("mode", { mode: "solo" });
-      solo.state = solo.load();
-      showGame("solo");
-      const st = solo.state;
-      if (st.open && !byId[st.open]) st.open = null;
-      if (st.result && !(byId[st.result] && st.answered[st.result])) st.result = null;
-      solo.render();
-      if (st.result) solo.showResult(st.result);
-      else if (st.open && !st.answered[st.open]) solo.open(st.open);
-      else solo.maybeEnd();
-    },
-    render() {
-      const st = solo.state;
-      renderBoard((id) => {
-        const a = st.answered[id];
-        if (a) return { kind: "done", mark: a.correct ? "ok" : "bad", symbol: a.correct ? "✓" : "✕", word: a.correct ? "IEGŪTS" : "ZAUDĒTS" };
-        return { kind: "open", clickable: true };
-      }, solo.open);
-      $("score").textContent = solo.score();
-      $("progress").textContent = `${Object.keys(st.answered).length} / ${TOTAL}`;
-    },
-    open(id) {
-      if (solo.state.answered[id]) return;
-      solo.state.open = id;
-      solo.save();
-      showQuestion(id, {
-        interactive: true,
-        note: "Jautājumu nevar aizvērt bez atbildes – arī pārlādējot lapu tas atvērsies atkal.",
-        onAnswer: (choice) => solo.answer(id, choice),
-      });
-    },
-    answer(id, choice) {
-      const st = solo.state;
-      if (st.answered[id]) return;
-      st.answered[id] = { choice, correct: choice === byId[id].answer };
-      st.open = null;
-      st.result = id;
-      solo.save(); // saved before anything is shown – a reload cannot undo it
-      hideQuestion();
-      solo.render();
-      solo.showResult(id);
-    },
-    showResult(id) {
-      const a = solo.state.answered[id];
-      showResult(id, a, {
-        closable: true,
-        sub: a.correct ? `Kontā tagad: ${euro(solo.score())}` : `Šo naudu tu nesaņēmi. Kontā joprojām: ${euro(solo.score())}`,
-      });
-    },
-    closeResult() {
-      solo.state.result = null;
-      solo.save();
-      hideResult();
-      solo.maybeEnd();
-    },
-    maybeEnd() {
-      const st = solo.state;
-      if (Object.keys(st.answered).length < TOTAL || st.endSeen) return;
-      const correct = Object.values(st.answered).filter((a) => a.correct).length;
-      $("ePoints").textContent = euro(solo.score());
-      $("eSub").textContent = `Pareizi atbildēti ${correct} no ${TOTAL} jautājumiem. Maksimums: ${euro(MAX_POINTS)}.`;
-      $("end").classList.add("show");
-      lockScroll(true);
-      $("eClose").focus({ preventScroll: true });
-    },
-    reset() {
-      solo.state = solo.empty();
-      solo.save();
-      solo.render();
-    },
-  };
-  $("eClose").addEventListener("click", () => {
-    solo.state.endSeen = true;
-    solo.save();
-    $("end").classList.remove("show");
-    lockScroll(false);
-  });
 
   // ======================================================================
   //  HOST (moderator)
   // ======================================================================
   const host = {
-    hs: null,        // persisted room state
+    hs: null,          // persisted room state
     peer: null,
-    conns: new Map(), // peerId -> { conn, token }
+    conns: new Map(),  // peerId -> { conn, token }
     retryTimer: null,
     retries: 0,
 
-    newState(code) {
-      return { code, phase: "board", current: null, used: {}, players: {}, last: null };
+    newState() {
+      // players[token] = { name, answers: { qid: { choice, correct } } }
+      return { code: ROOM_CODE, phase: "board", current: null, used: {}, players: {}, last: null };
     },
     save() { store.set("host", host.hs); },
 
-    create() {
-      host.hs = host.newState(randomId(4));
+    open() {
+      const saved = store.get("host");
+      // keep an unfinished game (same code) so a moderator can continue after closing the tab
+      host.hs = saved && saved.code === ROOM_CODE && saved.players ? saved : host.newState();
+      if (!host.hs.used) host.hs.used = {};
       host.save();
       store.set("mode", { mode: "host" });
-      host.start(false);
+      host.start();
     },
-    resume() {
-      host.hs = store.get("host");
-      if (!host.hs || !host.hs.code) { showHome(); return; }
-      host.start(true);
-    },
-    start(restoring) {
+    start() {
       showGame("host");
-      $("roomCode").textContent = host.hs.code;
-      host.connect(restoring);
+      host.connect();
       host.renderAll();
-      if (host.hs.phase === "question" && host.hs.current) host.showQ();
+      host.syncOverlay();
     },
 
-    connect(restoring) {
+    connect() {
       clearTimeout(host.retryTimer);
       if (host.peer) { try { host.peer.destroy(); } catch (e) {} }
       host.conns.clear();
       setConn("", "Atver istabu…");
       if (typeof Peer === "undefined") { setConn("bad", "Neizdevās ielādēt savienojuma bibliotēku. Pārbaudi internetu."); return; }
-      const peer = new Peer(PEER_PREFIX + host.hs.code, { debug: 0 });
+      const peer = new Peer(PEER_PREFIX + ROOM_CODE, { debug: 0 });
       host.peer = peer;
       peer.on("open", () => {
         host.retries = 0;
@@ -458,22 +400,18 @@
       });
       peer.on("error", (err) => {
         if (err.type === "unavailable-id") {
-          if (restoring && host.retries < 10) {
-            // our own old connection may still be registered for a few seconds after a reload
-            host.retries++;
-            setConn("", "Atjauno istabu…");
-            host.retryTimer = setTimeout(() => host.connect(true), 3000);
-          } else if (!restoring) {
-            host.hs.code = randomId(4);
-            host.save();
-            $("roomCode").textContent = host.hs.code;
-            host.connect(false);
+          // after a reload our previous connection can stay registered for a few seconds;
+          // if it never frees up, the room is open on another device or tab
+          host.retries++;
+          if (host.retries <= 10) {
+            setConn("", "Atver istabu… (mēģinājums " + host.retries + ")");
+            host.retryTimer = setTimeout(() => host.connect(), 3000);
           } else {
-            setConn("bad", "Istabas kods ir aizņemts. Izej un izveido jaunu istabu.");
+            setConn("bad", `Istaba ${ROOM_CODE} jau ir atvērta citā ierīcē vai cilnē. Aizver to un pārlādē lapu.`);
           }
         } else if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) {
           setConn("bad", "Nav savienojuma ar serveri. Mēģina vēlreiz…");
-          host.retryTimer = setTimeout(() => host.connect(true), 4000);
+          host.retryTimer = setTimeout(() => host.connect(), 4000);
         } else if (err.type === "browser-incompatible") {
           setConn("bad", "Šis pārlūks neatbalsta tiešsaistes spēli.");
         }
@@ -485,6 +423,11 @@
       host.conns.forEach((c) => { if (c.token) s.add(c.token); });
       return s;
     },
+    score(p) {
+      // money counts only for revealed questions
+      return Object.entries(p.answers).reduce(
+        (s, [qid, a]) => s + (a.correct && host.hs.used[qid] && byId[qid] ? byId[qid].points : 0), 0);
+    },
 
     onData(conn, d) {
       if (!d || typeof d !== "object") return;
@@ -494,7 +437,7 @@
         const name = String(d.name || "").trim().slice(0, 20) || "Spēlētājs";
         if (!token) return;
         host.conns.set(conn.peer, { conn, token });
-        if (!hs.players[token]) hs.players[token] = { name, score: 0, answers: {} };
+        if (!hs.players[token]) hs.players[token] = { name, answers: {} };
         else hs.players[token].name = name;
         host.save();
         host.broadcast();
@@ -505,36 +448,72 @@
         const q = byId[d.qid];
         const choice = Number(d.choice);
         if (!p || !q || hs.phase !== "question" || hs.current !== d.qid) return;
-        if (p.answers[d.qid]) { host.sendTo(entry); return; } // already answered – no second try
+        if (p.answers[d.qid]) { host.sendTo(entry); return; } // one answer only
         if (!Number.isInteger(choice) || choice < 0 || choice >= q.options.length) return;
-        const correct = choice === q.answer;
-        p.answers[d.qid] = { choice, correct };
-        if (correct) p.score += q.points;
+        p.answers[d.qid] = { choice, correct: choice === q.answer };
         host.save();
-        host.broadcast();
+        if (!host.maybeAutoReveal()) host.broadcast();
       }
     },
     drop(conn) {
-      if (host.conns.delete(conn.peer)) host.broadcast();
+      if (!host.conns.delete(conn.peer)) return;
+      if (!host.maybeAutoReveal()) host.broadcast();
+    },
+
+    // reveal by itself once every connected player has answered
+    maybeAutoReveal() {
+      const hs = host.hs;
+      if (hs.phase !== "question") return false;
+      const online = [...host.onlineTokens()];
+      if (!online.length) return false;
+      if (online.every((tk) => hs.players[tk] && hs.players[tk].answers[hs.current])) {
+        host.reveal();
+        return true;
+      }
+      return false;
+    },
+
+    roundStats() {
+      const hs = host.hs;
+      const q = byId[hs.current];
+      const counts = q ? q.options.map(() => 0) : [];
+      const inRoom = host.onlineTokens();
+      let answered = 0, correct = 0;
+      Object.entries(hs.players).forEach(([tk, p]) => {
+        const a = hs.current && p.answers[hs.current];
+        if (!a) return;
+        answered++;
+        inRoom.add(tk);
+        counts[a.choice] = (counts[a.choice] || 0) + 1;
+        if (a.correct) correct++;
+      });
+      const total = inRoom.size;
+      return { qid: hs.current, counts, answered, correct, total, pct: total ? Math.round((correct / total) * 100) : null };
     },
 
     leaderboard(forToken) {
       const online = host.onlineTokens();
       return sortRows(Object.entries(host.hs.players).map(([tk, p]) => ({
-        name: p.name, score: p.score, online: online.has(tk), me: tk === forToken,
+        name: p.name, score: host.score(p), online: online.has(tk), me: tk === forToken,
       })));
     },
     stateFor(token) {
       const hs = host.hs;
-      const p = hs.players[token] || { name: "", score: 0, answers: {} };
+      const p = hs.players[token] || { name: "", answers: {} };
+      // never send whether the current answer is right before the reveal
+      const answers = {};
+      Object.entries(p.answers).forEach(([qid, a]) => {
+        answers[qid] = hs.used[qid] ? { choice: a.choice, correct: a.correct } : { choice: a.choice };
+      });
       return {
         t: "state",
         phase: hs.phase,
         current: hs.current,
         used: hs.used,
         last: hs.last,
+        reveal: hs.phase === "reveal" ? hs.last : null,
         board: host.leaderboard(token),
-        me: { name: p.name, score: p.score, answers: p.answers },
+        me: { name: p.name, score: host.score(p), answers },
       };
     },
     sendTo(entry) {
@@ -545,37 +524,43 @@
       host.renderAll();
     },
 
-    liveStats() {
-      const hs = host.hs;
-      const online = host.onlineTokens();
-      let answered = 0, correct = 0;
-      const inRoom = new Set(online);
-      Object.entries(hs.players).forEach(([tk, p]) => {
-        const a = hs.current && p.answers[hs.current];
-        if (a) { answered++; inRoom.add(tk); if (a.correct) correct++; }
-      });
-      return { answered, correct, total: inRoom.size };
-    },
-
     renderAll() {
       const hs = host.hs;
       if (!hs || mode !== "host") return;
       renderBoard((id) => {
-        if (hs.used[id]) return { kind: "done", mark: "neutral", symbol: "●", word: "IZSPĒLĒTS" };
+        if (hs.used[id] && hs.current !== id) return { kind: "done", mark: "neutral", symbol: "●", word: "IZSPĒLĒTS" };
         return { kind: "open", clickable: hs.phase === "board", live: hs.current === id };
       }, host.pick);
       const online = host.onlineTokens().size;
-      const all = Object.keys(hs.players).length;
-      $("progress").textContent = `${online} / ${all}`;
+      $("progress").textContent = `${online} / ${Object.keys(hs.players).length}`;
       renderLeaderboard(host.leaderboard(null));
       renderPct(hs.last);
-      $("statusText").textContent = hs.phase === "question"
-        ? "Jautājums atvērts spēlētājiem."
-        : `Spēlētāji pievienojas ar kodu ${hs.code}. Izvēlies jautājumu – tas automātiski atvērsies visiem.`;
+      $("statusText").textContent =
+        hs.phase === "question" ? "Jautājums atvērts spēlētājiem." :
+        hs.phase === "reveal" ? "Rāda rezultātus." :
+        `Spēlētāji pievienojas ar kodu ${ROOM_CODE}. Izvēlies jautājumu – tas automātiski atvērsies visiem.`;
       if (hs.phase === "question") {
-        const s = host.liveStats();
+        const s = host.roundStats();
         $("liveAnswered").textContent = `${s.answered} / ${s.total}`;
-        $("liveCorrect").textContent = String(s.correct);
+      }
+    },
+
+    // keep the moderator's overlay in step with the phase
+    syncOverlay() {
+      const hs = host.hs;
+      if (hs.phase === "question" && hs.current) {
+        showQuestion(hs.current, { hostView: true });
+        $("livePctBox").hidden = true;
+        $("endQBtn").textContent = "Rādīt rezultātus";
+        host.renderAll();
+      } else if (hs.phase === "reveal" && hs.current && hs.last) {
+        showQuestion(hs.current, { hostView: true, reveal: hs.last });
+        $("liveAnswered").textContent = `${hs.last.answered} / ${hs.last.total}`;
+        $("livePct").textContent = hs.last.pct == null ? "—" : hs.last.pct + "%";
+        $("livePctBox").hidden = false;
+        $("endQBtn").textContent = "Nākamais jautājums";
+      } else {
+        hideQuestion();
       }
     },
 
@@ -586,56 +571,57 @@
       hs.current = id;
       host.save();
       host.broadcast();
-      host.showQ();
+      host.syncOverlay();
     },
-    showQ() {
-      showQuestion(host.hs.current, { hostView: true });
-      host.renderAll();
-    },
-    endQuestion() {
+    reveal() {
       const hs = host.hs;
       if (hs.phase !== "question") return;
-      const s = host.liveStats();
-      hs.last = {
-        qid: hs.current,
-        correct: s.correct,
-        total: s.total,
-        pct: s.total ? Math.round((s.correct / s.total) * 100) : null,
-      };
+      hs.last = host.roundStats();
       hs.used[hs.current] = true;
+      hs.phase = "reveal";
+      host.save();
+      host.broadcast();
+      host.syncOverlay();
+    },
+    next() {
+      const hs = host.hs;
+      if (hs.phase !== "reveal") return;
       hs.phase = "board";
       hs.current = null;
       host.save();
-      hideQuestion();
       host.broadcast();
+      host.syncOverlay();
     },
     reset() {
       const hs = host.hs;
-      Object.values(hs.players).forEach((p) => { p.score = 0; p.answers = {}; });
+      Object.values(hs.players).forEach((p) => { p.answers = {}; });
       hs.used = {};
       hs.last = null;
       hs.phase = "board";
       hs.current = null;
       host.save();
-      hideQuestion();
       host.broadcast();
+      host.syncOverlay();
     },
     leave() {
       host.conns.forEach((entry) => { try { entry.conn.send({ t: "closed" }); } catch (e) {} });
       clearTimeout(host.retryTimer);
       setTimeout(() => { try { host.peer && host.peer.destroy(); } catch (e) {} host.peer = null; }, 300);
-      store.del("host");
       host.hs = null;
       showHome();
     },
   };
-  $("endQBtn").addEventListener("click", () => host.endQuestion());
+  $("endQBtn").addEventListener("click", () => {
+    if (!host.hs) return;
+    if (host.hs.phase === "question") host.reveal();
+    else if (host.hs.phase === "reveal") host.next();
+  });
 
   // ======================================================================
   //  PLAYER
   // ======================================================================
   const player = {
-    session: null,   // { code, name, token }
+    session: null,   // { name, token }
     peer: null,
     conn: null,
     st: null,        // last state from host
@@ -650,7 +636,6 @@
       store.set("player", session);
       store.set("mode", { mode: "player" });
       showGame("player");
-      $("roomCode").textContent = session.code;
       $("score").textContent = "0";
       $("progress").textContent = `0 / ${TOTAL}`;
       renderLeaderboard([]);
@@ -666,7 +651,7 @@
       $("statusText").textContent = "";
       const go = () => {
         if (player.conn) { try { player.conn.close(); } catch (e) {} }
-        const conn = player.peer.connect(PEER_PREFIX + player.session.code, { reliable: true });
+        const conn = player.peer.connect(PEER_PREFIX + ROOM_CODE, { reliable: true });
         player.conn = conn;
         const openTimeout = setTimeout(() => { if (!conn.open) player.retry(); }, 9000);
         conn.on("open", () => {
@@ -686,7 +671,7 @@
       peer.on("disconnected", () => { if (!peer.destroyed) { try { peer.reconnect(); } catch (e) {} } });
       peer.on("error", (err) => {
         if (err.type === "peer-unavailable") {
-          if (!player.joined) player.fail("Istaba ar šādu kodu nav atrasta. Pārbaudi kodu.");
+          if (!player.joined) player.fail("Istaba vēl nav atvērta. Pagaidi, kamēr moderators to atver, un mēģini vēlreiz.");
           else player.retry();
         } else if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) {
           player.retry();
@@ -699,7 +684,7 @@
       if (mode !== "player") return;
       clearTimeout(player.timer);
       player.attempt++;
-      if (!player.joined && player.attempt > 2) { player.fail("Neizdevās pievienoties istabai. Pārbaudi kodu un internetu."); return; }
+      if (!player.joined && player.attempt > 2) { player.fail("Neizdevās pievienoties istabai. Pārbaudi internetu un mēģini vēlreiz."); return; }
       setConn("bad", "Savienojums pārtrūka. Mēģina vēlreiz…");
       player.timer = setTimeout(() => player.connect(), Math.min(2000 * player.attempt, 8000));
     },
@@ -729,59 +714,59 @@
       if (d.t !== "state") return;
       player.joined = true;
       setConn("ok", "Savienots ar istabu");
-      const prev = player.st;
       player.st = d;
-      player.apply(prev, d);
+      player.apply(d);
     },
 
     renderBoard() {
       const st = player.st;
       renderBoard((id) => {
-        if (st && st.used[id]) {
+        if (st && st.used[id] && !(st.phase === "reveal" && st.current === id)) {
           const a = st.me.answers[id];
-          if (a) return { kind: "done", mark: a.correct ? "ok" : "bad", symbol: a.correct ? "✓" : "✕", word: a.correct ? "IEGŪTS" : "ZAUDĒTS" };
+          if (a && "correct" in a) return { kind: "done", mark: a.correct ? "ok" : "bad", symbol: a.correct ? "✓" : "✕", word: a.correct ? "IEGŪTS" : "ZAUDĒTS" };
           return { kind: "done", mark: "neutral", symbol: "–", word: "NEATBILDĒTS" };
         }
         return { kind: "open", clickable: false, live: !!st && st.current === id };
       }, () => {});
     },
 
-    apply(prev, st) {
+    apply(st) {
       $("score").textContent = st.me.score;
       $("progress").textContent = `${Object.keys(st.used).length} / ${TOTAL}`;
       renderLeaderboard(st.board);
       renderPct(st.last);
       player.renderBoard();
-      $("statusText").textContent = st.phase === "question"
-        ? "Jautājums atvērts – atbildi!"
-        : "Gaidi, kamēr moderators izvēlēsies nākamo jautājumu.";
+      $("statusText").textContent =
+        st.phase === "question" ? "Jautājums atvērts – atbildi!" :
+        st.phase === "reveal" ? "Rāda rezultātus." :
+        "Gaidi, kamēr moderators izvēlēsies nākamo jautājumu.";
 
-      if (st.phase === "question" && st.current) {
-        const id = st.current;
+      const id = st.current;
+      if (st.phase === "question" && id) {
+        hideResult();
         const a = st.me.answers[id];
-        if (a) {
-          if (shownQ) hideQuestion();
-          if (shownResult !== id) {
-            showResult(id, a, {
-              closable: false,
-              sub: a.correct ? `Kontā tagad: ${euro(st.me.score)}` : `Šo naudu tu nesaņēmi. Kontā joprojām: ${euro(st.me.score)}`,
-            });
-          }
-        } else if (shownQ !== id) {
-          hideResult();
-          showQuestion(id, {
+        const k = id + ":" + (a ? a.choice : "-");
+        if (shownQKey !== k) {
+          shownQKey = k;
+          showQuestion(id, a ? {
             interactive: true,
-            note: "Tev ir viens mēģinājums. Atbilde tiek nosūtīta moderatoram.",
+            picked: a.choice,
+            note: "Atbilde pieņemta. Rezultāti parādīsies, kad visi būs atbildējuši.",
+          } : {
+            interactive: true,
+            note: "Tev ir viens mēģinājums.",
             onAnswer: (choice) => player.answer(id, choice),
           });
         }
+      } else if (st.phase === "reveal" && id && st.reveal) {
+        if (shownQKey) hideQuestion();
+        if (shownResult !== id) {
+          const a = st.me.answers[id];
+          showResult(id, a && "correct" in a ? a : null, st.reveal, `Kontā tagad: ${euro(st.me.score)}`);
+        }
       } else {
-        const wasOpen = shownQ || shownResult;
         hideQuestion();
         hideResult();
-        if (wasOpen && prev && prev.phase === "question" && st.last && st.last.qid === prev.current && st.last.pct != null) {
-          toast(`${st.last.pct}% spēlētāju atbildēja pareizi.`);
-        }
       }
     },
 
@@ -793,9 +778,8 @@
       } else {
         $("qNote").textContent = "Nav savienojuma ar istabu. Atbilde netika nosūtīta – mēģini vēlreiz, kad savienojums atjaunosies.";
         $("qNote").hidden = false;
-        // let them try again once reconnected
+        shownQKey = null; // next state from the host redraws the options
         $("qOpts").querySelectorAll("button").forEach((b) => { b.disabled = false; b.classList.remove("picked"); });
-        shownQ = null;
       }
     },
 
@@ -809,28 +793,25 @@
   // ======================================================================
   //  Wiring
   // ======================================================================
-  $("rClose").addEventListener("click", () => { if (mode === "solo") solo.closeResult(); });
-
   $("resetBtn").addEventListener("click", () => {
-    if (mode === "solo") {
-      askPassword({ title: "Sākt no jauna", text: "Ievadi paroli, lai dzēstu visu progresu un naudu.", ok: "Dzēst progresu", danger: true, onOk: solo.reset });
-    } else if (mode === "host") {
-      askPassword({ title: "Sākt no jauna", text: "Visiem spēlētājiem nauda tiks nodzēsta un jautājumi atkal būs pieejami.", ok: "Sākt no jauna", danger: true, onOk: host.reset });
-    }
+    if (mode !== "host") return;
+    askPassword({
+      title: "Sākt no jauna",
+      text: "Visiem spēlētājiem nauda tiks nodzēsta un visi jautājumi atkal būs pieejami.",
+      ok: "Sākt no jauna", danger: true, onOk: host.reset,
+    });
   });
   $("leaveBtn").addEventListener("click", () => {
-    if (mode === "solo") showHome();
-    else if (mode === "player") {
+    if (mode === "player") {
       if (confirm("Iziet no istabas? Tava nauda paliks saglabāta, ja pievienosies atkal no šīs ierīces.")) player.leave();
     } else if (mode === "host") {
-      if (confirm("Slēgt istabu? Spēle visiem spēlētājiem beigsies.")) host.leave();
+      if (confirm("Slēgt istabu? Spēlētāji tiks atvienoti. Spēles gaita saglabāsies, un istabu varēs atvērt atkal.")) host.leave();
     }
   });
 
-  $("soloBtn").addEventListener("click", () => solo.start());
   $("hostBtn").addEventListener("click", () => {
     $("hostErr").textContent = "";
-    askPassword({ title: "Moderators", text: "Ievadi moderatora paroli, lai izveidotu istabu.", ok: "Izveidot istabu", onOk: host.create });
+    askPassword({ title: "Moderators", text: "Ievadi moderatora paroli, lai atvērtu istabu.", ok: "Atvērt istabu", onOk: host.open });
   });
   $("joinCode").addEventListener("input", (e) => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -841,12 +822,12 @@
     const code = $("joinCode").value.trim().toUpperCase();
     $("joinErr").textContent = "";
     if (!name) { $("joinErr").textContent = "Ievadi savu vārdu."; return; }
-    if (code.length !== 4) { $("joinErr").textContent = "Istabas kodā ir 4 simboli."; return; }
+    if (code !== ROOM_CODE) { $("joinErr").textContent = "Nepareizs istabas kods."; return; }
     const old = store.get("player");
-    // same device + same room keeps the same token, so the score survives re-joining
-    const token = old && old.code === code && old.token ? old.token : randomId(16);
+    // the same device keeps the same token, so the money survives re-joining
+    const token = old && old.token ? old.token : randomId(16);
     store.set("lastName", name);
-    player.start({ code, name, token }, true);
+    player.start({ name, token }, true);
   });
 
   // ---- start: resume whatever this device was doing ----
@@ -856,8 +837,7 @@
   if (urlCode) $("joinCode").value = urlCode.toUpperCase().slice(0, 4);
 
   const saved = store.get("mode");
-  if (saved && saved.mode === "solo") solo.start();
-  else if (saved && saved.mode === "host") host.resume();
+  if (saved && saved.mode === "host" && store.get("host")) host.open();
   else if (saved && saved.mode === "player" && store.get("player")) player.start(store.get("player"), false);
   else showHome();
 })();
