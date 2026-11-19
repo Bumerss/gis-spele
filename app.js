@@ -270,8 +270,11 @@
       chart.hidden = true;
     }
     $("qHint").textContent = opts.reveal ? "KĀ ATBILDĒJA SPĒLĒTĀJI" : opts.hostView ? "ATBILŽU VARIANTI" : answered ? "TAVA ATBILDE PIEŅEMTA" : "IZVĒLIES VIENU ATBILDI";
-    $("qNote").textContent = opts.note || "";
-    $("qNote").hidden = !opts.note;
+    // at the reveal the moderator screen shows the explanation (if the question has one)
+    const note = opts.reveal ? (q.explain || "") : (opts.note || "");
+    $("qNote").textContent = note;
+    $("qNote").hidden = !note;
+    $("qNote").classList.toggle("q-explain", !!opts.reveal);
     $("hostBox").hidden = !opts.hostView;
 
     const wasOpen = $("question").classList.contains("show");

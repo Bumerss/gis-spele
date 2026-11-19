@@ -13,7 +13,7 @@
  * SVARĪGI: ja maini jautājumus pēc tam, kad kāds jau spēlējis,
  * palielini QUESTIONS_VERSION, lai notīrītu veco saglabāto progresu.
  */
-const QUESTIONS_VERSION = 2;
+const QUESTIONS_VERSION = 3;
 
 const CATEGORIES = [
   {
@@ -198,8 +198,9 @@ const CATEGORIES = [
       {
         points: 200,
         q: "Kurš dzīvnieks būtu labākais ĢIS speciālists?",
-        options: ["Kurmis, jo zina visu par pazemes slāņiem", "Zelta zivtiņa", "Kaķis", "Pingvīns"],
+        options: ["Kurmis", "Zelta zivtiņa", "Kaķis", "Pingvīns"],
         answer: 0,
+        explain: "Jo kurmis zina visu par pazemes slāņiem.",
       },
       {
         points: 300,
@@ -209,24 +210,15 @@ const CATEGORIES = [
       },
       {
         points: 400,
-        draft: true,
-        q: "Patiesība vai mīts: Uz Zemes ir vieta, kur vienlaikus var stāvēt četros ASV štatos.",
-        options: ["Patiesība", "Mīts"],
-        answer: 0,
-        explain: "“Four Corners” – vieta, kur satiekas Jūtas, Kolorādo, Ņūmeksikas un Arizonas štati.",
+        q: "Kur Jelgavā viena stundiņa visbiežāk pārvēršas par piecām?",
+        options: ["Bibliotēkā", "Pilī, meklējot īsto auditoriju", "Tonusā", "Konsultācijā pie pasniedzēja"],
+        answer: 2,
       },
       {
         points: 500,
-        draft: true,
-        q: "Kas īstenībā atrodas “Null Island” – punktā ar koordinātām 0°, 0°?",
-        options: [
-          "Tropu sala ar kūrortu",
-          "Meteoroloģiskā boja Atlantijas okeānā",
-          "Kādas Āfrikas valsts galvaspilsēta",
-          "Slepena GIS speciālistu bāze",
-        ],
-        answer: 1,
-        explain: "Tur ir tikai boja okeānā. Bet GIS kļūdu dēļ tur “nonāk” ļoti daudz datu ar trūkstošām koordinātām (0, 0).",
+        q: "Students jau pusstundu riņķo pa Jelgavas centru. Ko viņš dara?",
+        options: ["Meklē pazudušu maku", "Veic kvartāla izpēti", "Meklē bezmaksas stāvvietu", "Vāc soļus"],
+        answer: 2,
       },
     ],
   },
