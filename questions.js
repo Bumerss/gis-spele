@@ -17,7 +17,7 @@
  * SVARĪGI: ja maini jautājumus pēc tam, kad kāds jau spēlējis,
  * palielini QUESTIONS_VERSION, lai notīrītu veco saglabāto progresu.
  */
-const QUESTIONS_VERSION = 4;
+const QUESTIONS_VERSION = 5;
 
 const CATEGORIES = [
   {
@@ -28,8 +28,7 @@ const CATEGORIES = [
         q: "Kuru pilsētu redzi aerouzņēmumā?",
         image: "img/pilseta-aerofoto.png",
         options: ["Jelgava", "Sigulda", "Cēsis", "Kuldīga", "Ogre"],
-        answer: 4, // PDF nav norādīta pareizā atbilde – PĀRBAUDI!
-        unverified: true,
+        answer: 3, // Kuldīga
       },
       {
         points: 200,
